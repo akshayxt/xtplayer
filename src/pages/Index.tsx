@@ -4,6 +4,7 @@ import SplashScreen from '@/components/SplashScreen';
 import Header from '@/components/Header';
 import VideoGrid from '@/components/VideoGrid';
 import MiniPlayer from '@/components/MiniPlayer';
+import ContactSection from '@/components/ContactSection';
 import { ApiKeyProvider } from '@/contexts/ApiKeyContext';
 import { AudioPlayerProvider, useAudioPlayer } from '@/contexts/AudioPlayerContext';
 
@@ -12,11 +13,12 @@ const MainContent = () => {
   const { currentVideo } = useAudioPlayer();
 
   return (
-    <div className={`min-h-screen bg-background ${currentVideo ? 'pb-24' : ''}`}>
+    <div className={`min-h-screen flex flex-col bg-background ${currentVideo ? 'pb-24' : ''}`}>
       <Header onSearch={setSearchQuery} searchQuery={searchQuery} />
-      <main className="container px-4 py-8">
+      <main className="container px-4 py-8 flex-1">
         <VideoGrid searchQuery={searchQuery} />
       </main>
+      <ContactSection />
       <MiniPlayer />
     </div>
   );
