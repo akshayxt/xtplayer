@@ -1,13 +1,48 @@
-// Update this page (the content is just a fallback if you fail to update the page)
+import { useState, useEffect } from 'react';
+import { Helmet } from 'react-helmet-async';
+import SplashScreen from '@/components/SplashScreen';
+import Header from '@/components/Header';
+import VideoGrid from '@/components/VideoGrid';
+import MiniPlayer from '@/components/MiniPlayer';
+import { ApiKeyProvider } from '@/contexts/ApiKeyContext';
+import { AudioPlayerProvider, useAudioPlayer } from '@/contexts/AudioPlayerContext';
+
+const MainContent = () => {
+  const [searchQuery, setSearchQuery] = useState('');
+  const { currentVideo } = useAudioPlayer();
+
+  return (
+    <div className={`min-h-screen bg-background ${currentVideo ? 'pb-24' : ''}`}>
+      <Header onSearch={setSearchQuery} searchQuery={searchQuery} />
+      <main className="container px-4 py-8">
+        <VideoGrid searchQuery={searchQuery} />
+      </main>
+      <MiniPlayer />
+    </div>
+  );
+};
 
 const Index = () => {
+  const [showSplash, setShowSplash] = useState(true);
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background">
-      <div className="text-center">
-        <h1 className="mb-4 text-4xl font-bold">Welcome to Your Blank App</h1>
-        <p className="text-xl text-muted-foreground">Start building your amazing project here!</p>
-      </div>
-    </div>
+    <>
+      <Helmet>
+        <title>XT Builds - Premium Music Experience</title>
+        <meta
+          name="description"
+          content="XT Builds - Stream music and videos with background playback. Your premium YouTube music experience."
+        />
+        <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+      </Helmet>
+
+      <ApiKeyProvider>
+        <AudioPlayerProvider>
+          {showSplash && <SplashScreen onComplete={() => setShowSplash(false)} />}
+          <MainContent />
+        </AudioPlayerProvider>
+      </ApiKeyProvider>
+    </>
   );
 };
 
