@@ -1,6 +1,7 @@
-import React, { createContext, useContext, useState, useRef, ReactNode, useEffect } from 'react';
+// Audio Player Context with autoplay, repeat, and recently played features
+import React, { createContext, useContext, useState, useRef, ReactNode, useEffect, useCallback } from 'react';
 
-interface Video {
+export interface Video {
   id: string;
   title: string;
   thumbnail: string;
@@ -12,14 +13,24 @@ interface AudioPlayerContextType {
   currentVideo: Video | null;
   isPlaying: boolean;
   isMinimized: boolean;
+  progress: number;
+  duration: number;
+  isAutoplay: boolean;
+  repeatMode: 'off' | 'one' | 'all';
+  playlist: Video[];
+  recentlyPlayed: Video[];
   play: (video: Video) => void;
   pause: () => void;
   resume: () => void;
   stop: () => void;
   toggleMinimize: () => void;
-  progress: number;
-  duration: number;
   seek: (time: number) => void;
+  toggleAutoplay: () => void;
+  setRepeatMode: (mode: 'off' | 'one' | 'all') => void;
+  playNext: () => void;
+  playPrevious: () => void;
+  addToPlaylist: (video: Video) => void;
+  setPlaylist: (videos: Video[]) => void;
 }
 
 // YouTube IFrame API types
@@ -74,14 +85,46 @@ declare global {
 
 const AudioPlayerContext = createContext<AudioPlayerContextType | undefined>(undefined);
 
+const RECENTLY_PLAYED_KEY = 'recentlyPlayed';
+const MAX_RECENT = 20;
+
 export const AudioPlayerProvider = ({ children }: { children: ReactNode }) => {
   const [currentVideo, setCurrentVideo] = useState<Video | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isMinimized, setIsMinimized] = useState(false);
   const [progress, setProgress] = useState(0);
   const [duration, setDuration] = useState(0);
+  const [isAutoplay, setIsAutoplay] = useState(true);
+  const [repeatMode, setRepeatModeState] = useState<'off' | 'one' | 'all'>('off');
+  const [playlist, setPlaylistState] = useState<Video[]>([]);
+  const [recentlyPlayed, setRecentlyPlayed] = useState<Video[]>([]);
+  const [currentIndex, setCurrentIndex] = useState(-1);
+  
   const playerRef = useRef<YTPlayer | null>(null);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
+  const playNextRef = useRef<() => void>(() => {});
+
+  // Load recently played from localStorage
+  useEffect(() => {
+    const stored = localStorage.getItem(RECENTLY_PLAYED_KEY);
+    if (stored) {
+      try {
+        setRecentlyPlayed(JSON.parse(stored));
+      } catch (e) {
+        console.error('Failed to parse recently played:', e);
+      }
+    }
+  }, []);
+
+  // Save recently played to localStorage
+  const addToRecentlyPlayed = useCallback((video: Video) => {
+    setRecentlyPlayed(prev => {
+      const filtered = prev.filter(v => v.id !== video.id);
+      const updated = [video, ...filtered].slice(0, MAX_RECENT);
+      localStorage.setItem(RECENTLY_PLAYED_KEY, JSON.stringify(updated));
+      return updated;
+    });
+  }, []);
 
   useEffect(() => {
     // Load YouTube IFrame API
@@ -99,7 +142,7 @@ export const AudioPlayerProvider = ({ children }: { children: ReactNode }) => {
     };
   }, []);
 
-  const initPlayer = (videoId: string) => {
+  const initPlayer = useCallback((videoId: string) => {
     if (playerRef.current) {
       playerRef.current.destroy();
     }
@@ -109,6 +152,9 @@ export const AudioPlayerProvider = ({ children }: { children: ReactNode }) => {
       const dur = playerRef.current?.getDuration() || 0;
       setDuration(dur);
       
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+      }
       intervalRef.current = setInterval(() => {
         const currentTime = playerRef.current?.getCurrentTime() || 0;
         setProgress(currentTime);
@@ -123,6 +169,8 @@ export const AudioPlayerProvider = ({ children }: { children: ReactNode }) => {
       } else if (event.data === 0) { // ENDED
         setIsPlaying(false);
         setProgress(0);
+        // Handle autoplay/repeat
+        playNextRef.current();
       }
     };
 
@@ -160,13 +208,69 @@ export const AudioPlayerProvider = ({ children }: { children: ReactNode }) => {
     };
 
     checkYT();
-  };
+  }, []);
 
-  const play = (video: Video) => {
+  const playNext = useCallback(() => {
+    if (repeatMode === 'one' && currentVideo) {
+      // Repeat the same song
+      initPlayer(currentVideo.id);
+      return;
+    }
+
+    const nextIndex = currentIndex + 1;
+    if (nextIndex < playlist.length) {
+      const nextVideo = playlist[nextIndex];
+      setCurrentIndex(nextIndex);
+      setCurrentVideo(nextVideo);
+      addToRecentlyPlayed(nextVideo);
+      initPlayer(nextVideo.id);
+    } else if (repeatMode === 'all' && playlist.length > 0) {
+      // Loop back to start
+      setCurrentIndex(0);
+      setCurrentVideo(playlist[0]);
+      addToRecentlyPlayed(playlist[0]);
+      initPlayer(playlist[0].id);
+    } else if (isAutoplay && playlist.length > 0 && nextIndex >= playlist.length) {
+      // Autoplay but reached end - just stop
+      setIsPlaying(false);
+    }
+  }, [repeatMode, currentVideo, currentIndex, playlist, isAutoplay, initPlayer, addToRecentlyPlayed]);
+
+  // Keep playNextRef updated
+  useEffect(() => {
+    playNextRef.current = playNext;
+  }, [playNext]);
+
+  const playPrevious = useCallback(() => {
+    if (progress > 3) {
+      // If more than 3 seconds in, restart current song
+      playerRef.current?.seekTo(0, true);
+      setProgress(0);
+    } else if (currentIndex > 0) {
+      const prevVideo = playlist[currentIndex - 1];
+      setCurrentIndex(prev => prev - 1);
+      setCurrentVideo(prevVideo);
+      addToRecentlyPlayed(prevVideo);
+      initPlayer(prevVideo.id);
+    }
+  }, [currentIndex, playlist, progress, initPlayer, addToRecentlyPlayed]);
+
+  const play = useCallback((video: Video) => {
     setCurrentVideo(video);
     setIsMinimized(false);
+    addToRecentlyPlayed(video);
+    
+    // Find index in playlist or add to it
+    const index = playlist.findIndex(v => v.id === video.id);
+    if (index >= 0) {
+      setCurrentIndex(index);
+    } else {
+      setPlaylistState(prev => [...prev, video]);
+      setCurrentIndex(playlist.length);
+    }
+    
     initPlayer(video.id);
-  };
+  }, [initPlayer, addToRecentlyPlayed, playlist]);
 
   const pause = () => {
     playerRef.current?.pauseVideo();
@@ -197,20 +301,50 @@ export const AudioPlayerProvider = ({ children }: { children: ReactNode }) => {
     setProgress(time);
   };
 
+  const toggleAutoplay = useCallback(() => {
+    setIsAutoplay(prev => !prev);
+  }, []);
+
+  const setRepeatMode = useCallback((mode: 'off' | 'one' | 'all') => {
+    setRepeatModeState(mode);
+  }, []);
+
+  const addToPlaylist = useCallback((video: Video) => {
+    setPlaylistState(prev => {
+      if (prev.find(v => v.id === video.id)) return prev;
+      return [...prev, video];
+    });
+  }, []);
+
+  const setPlaylist = useCallback((videos: Video[]) => {
+    setPlaylistState(videos);
+    setCurrentIndex(-1);
+  }, []);
+
   return (
     <AudioPlayerContext.Provider
       value={{
         currentVideo,
         isPlaying,
         isMinimized,
+        progress,
+        duration,
+        isAutoplay,
+        repeatMode,
+        playlist,
+        recentlyPlayed,
         play,
         pause,
         resume,
         stop,
         toggleMinimize,
-        progress,
-        duration,
         seek,
+        toggleAutoplay,
+        setRepeatMode,
+        playNext,
+        playPrevious,
+        addToPlaylist,
+        setPlaylist,
       }}
     >
       {children}

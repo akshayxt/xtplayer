@@ -1,7 +1,8 @@
-import { Play, Pause, X, ChevronUp, ChevronDown, SkipBack, SkipForward } from 'lucide-react';
+import { Play, Pause, X, ChevronUp, ChevronDown, SkipBack, SkipForward, Repeat, Repeat1, ListMusic } from 'lucide-react';
 import { useAudioPlayer } from '@/contexts/AudioPlayerContext';
 import { Slider } from '@/components/ui/slider';
 import { Button } from '@/components/ui/button';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 const MiniPlayer = () => {
   const {
@@ -15,7 +16,30 @@ const MiniPlayer = () => {
     progress,
     duration,
     seek,
+    isAutoplay,
+    repeatMode,
+    toggleAutoplay,
+    setRepeatMode,
+    playNext,
+    playPrevious,
   } = useAudioPlayer();
+
+  const cycleRepeatMode = () => {
+    if (repeatMode === 'off') setRepeatMode('one');
+    else if (repeatMode === 'one') setRepeatMode('all');
+    else setRepeatMode('off');
+  };
+
+  const getRepeatIcon = () => {
+    if (repeatMode === 'one') return <Repeat1 className="w-5 h-5" />;
+    return <Repeat className="w-5 h-5" />;
+  };
+
+  const getRepeatLabel = () => {
+    if (repeatMode === 'off') return 'Repeat Off';
+    if (repeatMode === 'one') return 'Repeat One';
+    return 'Repeat All';
+  };
 
   if (!currentVideo) return null;
 
@@ -81,7 +105,7 @@ const MiniPlayer = () => {
 
           {/* Controls */}
           <div className="flex items-center gap-2">
-            <Button variant="ghost" size="icon" className="hidden sm:flex">
+            <Button variant="ghost" size="icon" className="hidden sm:flex" onClick={playPrevious}>
               <SkipBack className="w-5 h-5" />
             </Button>
             <Button
@@ -91,7 +115,7 @@ const MiniPlayer = () => {
             >
               {isPlaying ? <Pause className="w-6 h-6" /> : <Play className="w-6 h-6 ml-0.5" />}
             </Button>
-            <Button variant="ghost" size="icon" className="hidden sm:flex">
+            <Button variant="ghost" size="icon" className="hidden sm:flex" onClick={playNext}>
               <SkipForward className="w-5 h-5" />
             </Button>
           </div>
@@ -113,6 +137,36 @@ const MiniPlayer = () => {
 
           {/* Actions */}
           <div className="flex items-center gap-1">
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={cycleRepeatMode}
+                    className={repeatMode !== 'off' ? 'text-primary' : ''}
+                  >
+                    {getRepeatIcon()}
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>{getRepeatLabel()}</TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={toggleAutoplay}
+                    className={isAutoplay ? 'text-primary' : ''}
+                  >
+                    <ListMusic className="w-5 h-5" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>{isAutoplay ? 'Autoplay On' : 'Autoplay Off'}</TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
             <Button variant="ghost" size="icon" onClick={toggleMinimize}>
               <ChevronDown className="w-5 h-5" />
             </Button>
