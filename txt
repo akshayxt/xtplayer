@@ -1,0 +1,13 @@
+Lock production mode completely
+
+Add splash screen
+
+Package portable EXE
+
+Add auto-update support
+
+
+Remove-Item -Recurse -Force dist, release -ErrorAction SilentlyContinue
+npm run build  
+npm start 
+npm run package
