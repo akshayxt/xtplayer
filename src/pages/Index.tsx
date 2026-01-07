@@ -5,6 +5,10 @@ import Header from '@/components/Header';
 import VideoGrid from '@/components/VideoGrid';
 import MiniPlayer from '@/components/MiniPlayer';
 import ContactSection from '@/components/ContactSection';
+import RecentlyPlayedGrid from '@/components/RecentlyPlayedGrid';
+import TrendingGrid from '@/components/TrendingGrid';
+import PlaylistsGrid from '@/components/PlaylistsGrid';
+import RecommendationsGrid from '@/components/RecommendationsGrid';
 import { ApiKeyProvider } from '@/contexts/ApiKeyContext';
 import { AudioPlayerProvider, useAudioPlayer } from '@/contexts/AudioPlayerContext';
 
@@ -16,7 +20,16 @@ const MainContent = () => {
     <div className={`min-h-screen flex flex-col bg-background ${currentVideo ? 'pb-24' : ''}`}>
       <Header onSearch={setSearchQuery} searchQuery={searchQuery} />
       <main className="container px-4 py-8 flex-1">
-        <VideoGrid searchQuery={searchQuery} />
+        {searchQuery ? (
+          <VideoGrid searchQuery={searchQuery} />
+        ) : (
+          <>
+            <RecentlyPlayedGrid />
+            <TrendingGrid />
+            <PlaylistsGrid />
+            <RecommendationsGrid />
+          </>
+        )}
       </main>
       <ContactSection />
       <MiniPlayer />
