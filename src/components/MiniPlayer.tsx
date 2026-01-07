@@ -2,13 +2,15 @@ import { useState } from 'react';
 import { 
   Play, Pause, X, ChevronUp, ChevronDown, 
   SkipBack, SkipForward, Repeat, Repeat1, 
-  ListMusic, Sparkles, Loader2 
+  ListMusic, Sparkles, Loader2, Shuffle,
+  Volume2, Volume1, VolumeX
 } from 'lucide-react';
 import { useAudioPlayer } from '@/contexts/AudioPlayerContext';
 import { Slider } from '@/components/ui/slider';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import AutoplayQueue from './AutoplayQueue';
+import { cn } from '@/lib/utils';
 
 const MiniPlayer = () => {
   const {
@@ -22,11 +24,16 @@ const MiniPlayer = () => {
     progress,
     duration,
     seek,
+    volume,
+    isMuted,
+    setVolume,
+    toggleMute,
     isAutoplay,
+    isShuffle,
     repeatMode,
     toggleAutoplay,
+    toggleShuffle,
     setRepeatMode,
-    playNext,
     playPrevious,
     autoplayQueue,
     isQueueBuilding,
@@ -34,6 +41,7 @@ const MiniPlayer = () => {
   } = useAudioPlayer();
 
   const [isQueueOpen, setIsQueueOpen] = useState(false);
+  const [showVolumeSlider, setShowVolumeSlider] = useState(false);
 
   const cycleRepeatMode = () => {
     if (repeatMode === 'off') setRepeatMode('one');
@@ -50,6 +58,12 @@ const MiniPlayer = () => {
     if (repeatMode === 'off') return 'Repeat Off';
     if (repeatMode === 'one') return 'Repeat One';
     return 'Repeat All';
+  };
+
+  const getVolumeIcon = () => {
+    if (isMuted || volume === 0) return <VolumeX className="w-5 h-5" />;
+    if (volume < 50) return <Volume1 className="w-5 h-5" />;
+    return <Volume2 className="w-5 h-5" />;
   };
 
   if (!currentVideo) return null;
@@ -137,6 +151,22 @@ const MiniPlayer = () => {
 
             {/* Controls */}
             <div className="flex items-center gap-2">
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button 
+                      variant="ghost" 
+                      size="icon" 
+                      className={cn("hidden sm:flex", isShuffle && "text-primary")}
+                      onClick={toggleShuffle}
+                    >
+                      <Shuffle className="w-4 h-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>{isShuffle ? 'Shuffle On' : 'Shuffle Off'}</TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+
               <Button variant="ghost" size="icon" className="hidden sm:flex" onClick={playPrevious}>
                 <SkipBack className="w-5 h-5" />
               </Button>
@@ -155,6 +185,22 @@ const MiniPlayer = () => {
               >
                 <SkipForward className="w-5 h-5" />
               </Button>
+
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={cycleRepeatMode}
+                      className={cn("hidden sm:flex", repeatMode !== 'off' && "text-primary")}
+                    >
+                      {getRepeatIcon()}
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>{getRepeatLabel()}</TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
             </div>
 
             {/* Time & Seek */}
@@ -172,24 +218,43 @@ const MiniPlayer = () => {
               <span className="text-xs text-muted-foreground w-10">{formatTime(duration)}</span>
             </div>
 
-            {/* Actions */}
-            <div className="flex items-center gap-1">
+            {/* Volume Control */}
+            <div 
+              className="hidden lg:flex items-center gap-2 relative"
+              onMouseEnter={() => setShowVolumeSlider(true)}
+              onMouseLeave={() => setShowVolumeSlider(false)}
+            >
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <Button
                       variant="ghost"
                       size="icon"
-                      onClick={cycleRepeatMode}
-                      className={repeatMode !== 'off' ? 'text-primary' : ''}
+                      onClick={toggleMute}
                     >
-                      {getRepeatIcon()}
+                      {getVolumeIcon()}
                     </Button>
                   </TooltipTrigger>
-                  <TooltipContent>{getRepeatLabel()}</TooltipContent>
+                  <TooltipContent>{isMuted ? 'Unmute' : 'Mute'}</TooltipContent>
                 </Tooltip>
               </TooltipProvider>
               
+              <div className={cn(
+                "flex items-center transition-all duration-200 overflow-hidden",
+                showVolumeSlider ? "w-24 opacity-100" : "w-0 opacity-0"
+              )}>
+                <Slider
+                  value={[isMuted ? 0 : volume]}
+                  max={100}
+                  step={1}
+                  onValueChange={([value]) => setVolume(value)}
+                  className="w-20"
+                />
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div className="flex items-center gap-1">
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger asChild>
