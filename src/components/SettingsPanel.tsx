@@ -1,10 +1,12 @@
 import { useState } from 'react';
-import { Key, Eye, EyeOff, Check, AlertCircle } from 'lucide-react';
+import { Key, Eye, EyeOff, Check, AlertCircle, Palette } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
+import { Separator } from '@/components/ui/separator';
 import { useApiKey } from '@/contexts/ApiKeyContext';
 import { useToast } from '@/hooks/use-toast';
+import ThemeSwitcher from './ThemeSwitcher';
 
 interface SettingsPanelProps {
   onClose: () => void;
@@ -37,7 +39,18 @@ const SettingsPanel = ({ onClose }: SettingsPanelProps) => {
   };
 
   return (
-    <div className="mt-8 space-y-6">
+    <div className="mt-6 space-y-6">
+      {/* Theme Section */}
+      <div className="space-y-4">
+        <div className="flex items-center gap-2 text-foreground">
+          <Palette className="w-5 h-5 text-primary" />
+          <h3 className="font-semibold">Appearance</h3>
+        </div>
+        <ThemeSwitcher />
+      </div>
+
+      <Separator />
+
       {/* API Key Section */}
       <div className="space-y-4">
         <div className="flex items-center gap-2 text-foreground">
@@ -45,7 +58,7 @@ const SettingsPanel = ({ onClose }: SettingsPanelProps) => {
           <h3 className="font-semibold">YouTube API Key</h3>
         </div>
 
-        <div className="p-4 rounded-lg bg-secondary/50 space-y-4">
+        <div className="p-4 rounded-xl bg-secondary/50 space-y-4 border border-border/50">
           <div className="flex items-start gap-2 text-sm text-muted-foreground">
             <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
             <p>
@@ -55,7 +68,7 @@ const SettingsPanel = ({ onClose }: SettingsPanelProps) => {
                 href="https://console.developers.google.com/"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-primary hover:underline"
+                className="text-primary hover:underline transition-colors"
               >
                 Google Cloud Console
               </a>
@@ -74,7 +87,7 @@ const SettingsPanel = ({ onClose }: SettingsPanelProps) => {
                 value={localKey}
                 onChange={(e) => setLocalKey(e.target.value)}
                 placeholder="Enter your API key..."
-                className="pr-10 bg-background border-border"
+                className="pr-10 bg-background border-border input-animated"
               />
               <button
                 type="button"
@@ -87,19 +100,23 @@ const SettingsPanel = ({ onClose }: SettingsPanelProps) => {
           </div>
 
           <div className="flex gap-2">
-            <Button onClick={handleSave} className="flex-1" disabled={!localKey.trim()}>
+            <Button
+              onClick={handleSave}
+              className="flex-1 btn-press"
+              disabled={!localKey.trim()}
+            >
               <Check className="w-4 h-4 mr-2" />
               Save Key
             </Button>
             {isApiKeySet && (
-              <Button variant="destructive" onClick={handleClear}>
+              <Button variant="destructive" onClick={handleClear} className="btn-press">
                 Clear
               </Button>
             )}
           </div>
 
           {isApiKeySet && (
-            <div className="flex items-center gap-2 text-sm text-green-500">
+            <div className="flex items-center gap-2 text-sm text-green-500 animate-fade-in">
               <Check className="w-4 h-4" />
               <span>API key is configured</span>
             </div>
@@ -107,15 +124,17 @@ const SettingsPanel = ({ onClose }: SettingsPanelProps) => {
         </div>
       </div>
 
+      <Separator />
+
       {/* About Section */}
       <div className="space-y-4">
         <h3 className="font-semibold text-foreground">About</h3>
-        <div className="p-4 rounded-lg bg-secondary/50 space-y-2 text-sm text-muted-foreground">
+        <div className="p-4 rounded-xl bg-secondary/50 space-y-2 text-sm text-muted-foreground border border-border/50">
           <p>
             <span className="gradient-text font-bold">XT Builds</span> - Premium Music Experience
           </p>
-          <p>Background audio playback for uninterrupted listening.</p>
-          <p className="text-xs">Version 1.0.0</p>
+          <p>Background audio playback with premium UI motion system.</p>
+          <p className="text-xs opacity-60">Version 2.0.0 • Motion UI</p>
         </div>
       </div>
     </div>
