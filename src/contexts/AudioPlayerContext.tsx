@@ -14,17 +14,28 @@ export interface Video {
   tempo?: 'slow' | 'medium' | 'fast';
 }
 
+export interface SavedPlaylist {
+  id: string;
+  name: string;
+  videos: Video[];
+  createdAt: number;
+}
+
 interface AudioPlayerContextType {
   currentVideo: Video | null;
   isPlaying: boolean;
   isMinimized: boolean;
   progress: number;
   duration: number;
+  volume: number;
+  isMuted: boolean;
   isAutoplay: boolean;
+  isShuffle: boolean;
   repeatMode: 'off' | 'one' | 'all';
   playlist: Video[];
   recentlyPlayed: Video[];
   autoplayQueue: Video[];
+  savedPlaylists: SavedPlaylist[];
   isQueueBuilding: boolean;
   play: (video: Video) => void;
   pause: () => void;
@@ -32,7 +43,10 @@ interface AudioPlayerContextType {
   stop: () => void;
   toggleMinimize: () => void;
   seek: (time: number) => void;
+  setVolume: (volume: number) => void;
+  toggleMute: () => void;
   toggleAutoplay: () => void;
+  toggleShuffle: () => void;
   setRepeatMode: (mode: 'off' | 'one' | 'all') => void;
   playNext: () => void;
   playPrevious: () => void;
@@ -41,6 +55,9 @@ interface AudioPlayerContextType {
   skipCurrent: () => void;
   removeFromQueue: (videoId: string) => void;
   clearQueue: () => void;
+  saveQueueAsPlaylist: (name: string) => void;
+  deletePlaylist: (id: string) => void;
+  playPlaylist: (playlist: SavedPlaylist, shuffle?: boolean) => void;
 }
 
 // YouTube IFrame API types
@@ -54,6 +71,9 @@ interface YTPlayer {
   destroy: () => void;
   setVolume: (volume: number) => void;
   getVolume: () => number;
+  isMuted: () => boolean;
+  mute: () => void;
+  unMute: () => void;
 }
 
 interface YTPlayerEvent {
@@ -100,9 +120,12 @@ const AudioPlayerContext = createContext<AudioPlayerContextType | undefined>(und
 const RECENTLY_PLAYED_KEY = 'recentlyPlayed';
 const AUTOPLAY_QUEUE_KEY = 'autoplayQueue';
 const SKIP_DATA_KEY = 'autoplaySkipData';
+const SAVED_PLAYLISTS_KEY = 'savedPlaylists';
+const VOLUME_KEY = 'playerVolume';
 const MAX_RECENT = 50;
 const QUEUE_SIZE = 25;
 const PRELOAD_THRESHOLD = 3;
+const DEFAULT_VOLUME = 80;
 
 // Genre/mood detection
 const GENRE_KEYWORDS: Record<string, string[]> = {
@@ -152,17 +175,31 @@ const analyzeVideo = (video: Video): Video => {
   return { ...video, genre, mood, tempo };
 };
 
+// Fisher-Yates shuffle algorithm
+const shuffleArray = <T,>(array: T[]): T[] => {
+  const shuffled = [...array];
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
+  return shuffled;
+};
+
 export const AudioPlayerProvider = ({ children }: { children: ReactNode }) => {
   const [currentVideo, setCurrentVideo] = useState<Video | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isMinimized, setIsMinimized] = useState(false);
   const [progress, setProgress] = useState(0);
   const [duration, setDuration] = useState(0);
+  const [volume, setVolumeState] = useState(DEFAULT_VOLUME);
+  const [isMuted, setIsMuted] = useState(false);
   const [isAutoplay, setIsAutoplay] = useState(true);
+  const [isShuffle, setIsShuffle] = useState(false);
   const [repeatMode, setRepeatModeState] = useState<'off' | 'one' | 'all'>('off');
   const [playlist, setPlaylistState] = useState<Video[]>([]);
   const [recentlyPlayed, setRecentlyPlayed] = useState<Video[]>([]);
   const [autoplayQueue, setAutoplayQueue] = useState<Video[]>([]);
+  const [savedPlaylists, setSavedPlaylists] = useState<SavedPlaylist[]>([]);
   const [isQueueBuilding, setIsQueueBuilding] = useState(false);
   const [currentIndex, setCurrentIndex] = useState(-1);
   
@@ -172,6 +209,7 @@ export const AudioPlayerProvider = ({ children }: { children: ReactNode }) => {
   const skipDataRef = useRef<Map<string, number>>(new Map());
   const apiKeyRef = useRef<string>('');
   const preloadTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const previousVolumeRef = useRef<number>(DEFAULT_VOLUME);
 
   // Load data from localStorage
   useEffect(() => {
@@ -201,6 +239,22 @@ export const AudioPlayerProvider = ({ children }: { children: ReactNode }) => {
         console.error('Failed to parse skip data:', e);
       }
     }
+
+    const storedPlaylists = localStorage.getItem(SAVED_PLAYLISTS_KEY);
+    if (storedPlaylists) {
+      try {
+        setSavedPlaylists(JSON.parse(storedPlaylists));
+      } catch (e) {
+        console.error('Failed to parse saved playlists:', e);
+      }
+    }
+
+    const storedVolume = localStorage.getItem(VOLUME_KEY);
+    if (storedVolume) {
+      const vol = parseInt(storedVolume, 10);
+      setVolumeState(vol);
+      previousVolumeRef.current = vol;
+    }
     
     const storedApiKey = localStorage.getItem('youtube_api_key');
     if (storedApiKey) {
@@ -214,6 +268,11 @@ export const AudioPlayerProvider = ({ children }: { children: ReactNode }) => {
       localStorage.setItem(AUTOPLAY_QUEUE_KEY, JSON.stringify(autoplayQueue));
     }
   }, [autoplayQueue]);
+
+  // Save playlists
+  useEffect(() => {
+    localStorage.setItem(SAVED_PLAYLISTS_KEY, JSON.stringify(savedPlaylists));
+  }, [savedPlaylists]);
 
   // Add to recently played
   const addToRecentlyPlayed = useCallback((video: Video) => {
@@ -312,7 +371,7 @@ export const AudioPlayerProvider = ({ children }: { children: ReactNode }) => {
     const seedAnalyzed = analyzeVideo(seed);
     const recentChannels = new Set(recentlyPlayed.slice(0, 5).map(v => v.channelId));
     
-    const ranked = allVideos
+    let ranked = allVideos
       .map(video => {
         let score = 50;
         
@@ -346,10 +405,15 @@ export const AudioPlayerProvider = ({ children }: { children: ReactNode }) => {
       .map(s => s.video)
       .slice(0, QUEUE_SIZE);
     
+    // Apply shuffle if enabled
+    if (isShuffle) {
+      ranked = shuffleArray(ranked);
+    }
+    
     setAutoplayQueue(ranked);
     setIsQueueBuilding(false);
-    console.log(`[Autoplay] Queue built with ${ranked.length} songs`);
-  }, [recentlyPlayed, autoplayQueue, buildSearchQueries]);
+    console.log(`[Autoplay] Queue built with ${ranked.length} songs${isShuffle ? ' (shuffled)' : ''}`);
+  }, [recentlyPlayed, autoplayQueue, buildSearchQueries, isShuffle]);
 
   // Load YouTube API
   useEffect(() => {
@@ -366,6 +430,13 @@ export const AudioPlayerProvider = ({ children }: { children: ReactNode }) => {
     };
   }, []);
 
+  // Apply volume to player
+  const applyVolume = useCallback((vol: number) => {
+    if (playerRef.current) {
+      playerRef.current.setVolume(vol);
+    }
+  }, []);
+
   // Initialize player
   const initPlayer = useCallback((videoId: string) => {
     if (playerRef.current) {
@@ -374,6 +445,8 @@ export const AudioPlayerProvider = ({ children }: { children: ReactNode }) => {
 
     const onReady = () => {
       playerRef.current?.playVideo();
+      // Apply saved volume
+      playerRef.current?.setVolume(isMuted ? 0 : volume);
       const dur = playerRef.current?.getDuration() || 0;
       setDuration(dur);
       
@@ -436,7 +509,7 @@ export const AudioPlayerProvider = ({ children }: { children: ReactNode }) => {
     };
 
     checkYT();
-  }, [autoplayQueue]);
+  }, [autoplayQueue, volume, isMuted]);
 
   // Play next logic
   const playNext = useCallback(() => {
@@ -447,7 +520,16 @@ export const AudioPlayerProvider = ({ children }: { children: ReactNode }) => {
     }
 
     // Check playlist first
-    const nextIndex = currentIndex + 1;
+    let nextIndex: number;
+    if (isShuffle && playlist.length > 1) {
+      // Pick random index different from current
+      do {
+        nextIndex = Math.floor(Math.random() * playlist.length);
+      } while (nextIndex === currentIndex && playlist.length > 1);
+    } else {
+      nextIndex = currentIndex + 1;
+    }
+
     if (nextIndex < playlist.length) {
       const nextVideo = playlist[nextIndex];
       setCurrentIndex(nextIndex);
@@ -459,10 +541,11 @@ export const AudioPlayerProvider = ({ children }: { children: ReactNode }) => {
     
     // Repeat all playlist
     if (repeatMode === 'all' && playlist.length > 0) {
-      setCurrentIndex(0);
-      setCurrentVideo(playlist[0]);
-      addToRecentlyPlayed(playlist[0]);
-      initPlayer(playlist[0].id);
+      const startIndex = isShuffle ? Math.floor(Math.random() * playlist.length) : 0;
+      setCurrentIndex(startIndex);
+      setCurrentVideo(playlist[startIndex]);
+      addToRecentlyPlayed(playlist[startIndex]);
+      initPlayer(playlist[startIndex].id);
       return;
     }
 
@@ -486,7 +569,7 @@ export const AudioPlayerProvider = ({ children }: { children: ReactNode }) => {
       buildAutoplayQueue(currentVideo);
     }
   }, [
-    repeatMode, currentVideo, currentIndex, playlist, 
+    repeatMode, currentVideo, currentIndex, playlist, isShuffle,
     isAutoplay, autoplayQueue, initPlayer, addToRecentlyPlayed, buildAutoplayQueue
   ]);
 
@@ -569,6 +652,32 @@ export const AudioPlayerProvider = ({ children }: { children: ReactNode }) => {
     setProgress(time);
   };
 
+  // Volume control
+  const setVolume = useCallback((vol: number) => {
+    const clampedVol = Math.max(0, Math.min(100, vol));
+    setVolumeState(clampedVol);
+    setIsMuted(clampedVol === 0);
+    applyVolume(clampedVol);
+    localStorage.setItem(VOLUME_KEY, clampedVol.toString());
+    if (clampedVol > 0) {
+      previousVolumeRef.current = clampedVol;
+    }
+  }, [applyVolume]);
+
+  const toggleMute = useCallback(() => {
+    if (isMuted) {
+      const restoreVol = previousVolumeRef.current || DEFAULT_VOLUME;
+      setVolumeState(restoreVol);
+      setIsMuted(false);
+      applyVolume(restoreVol);
+    } else {
+      previousVolumeRef.current = volume;
+      setVolumeState(0);
+      setIsMuted(true);
+      applyVolume(0);
+    }
+  }, [isMuted, volume, applyVolume]);
+
   const toggleAutoplay = useCallback(() => {
     setIsAutoplay(prev => {
       const newValue = !prev;
@@ -578,6 +687,18 @@ export const AudioPlayerProvider = ({ children }: { children: ReactNode }) => {
       return newValue;
     });
   }, [currentVideo, autoplayQueue.length, buildAutoplayQueue]);
+
+  const toggleShuffle = useCallback(() => {
+    setIsShuffle(prev => {
+      const newValue = !prev;
+      // Reshuffle queue if enabling shuffle
+      if (newValue && autoplayQueue.length > 0) {
+        setAutoplayQueue(shuffleArray(autoplayQueue));
+      }
+      console.log(`[Shuffle] ${newValue ? 'Enabled' : 'Disabled'}`);
+      return newValue;
+    });
+  }, [autoplayQueue]);
 
   const setRepeatMode = useCallback((mode: 'off' | 'one' | 'all') => {
     setRepeatModeState(mode);
@@ -603,6 +724,40 @@ export const AudioPlayerProvider = ({ children }: { children: ReactNode }) => {
     setAutoplayQueue([]);
   }, []);
 
+  // Save current queue as playlist
+  const saveQueueAsPlaylist = useCallback((name: string) => {
+    if (autoplayQueue.length === 0 && !currentVideo) return;
+    
+    const videos = currentVideo 
+      ? [currentVideo, ...autoplayQueue]
+      : autoplayQueue;
+    
+    const newPlaylist: SavedPlaylist = {
+      id: `playlist_${Date.now()}`,
+      name: name.trim() || `My Playlist ${savedPlaylists.length + 1}`,
+      videos,
+      createdAt: Date.now(),
+    };
+    
+    setSavedPlaylists(prev => [newPlaylist, ...prev]);
+    console.log(`[Playlist] Saved "${newPlaylist.name}" with ${videos.length} songs`);
+  }, [autoplayQueue, currentVideo, savedPlaylists.length]);
+
+  const deletePlaylist = useCallback((id: string) => {
+    setSavedPlaylists(prev => prev.filter(p => p.id !== id));
+  }, []);
+
+  const playPlaylist = useCallback((savedPlaylist: SavedPlaylist, shuffle = false) => {
+    if (savedPlaylist.videos.length === 0) return;
+    
+    const videos = shuffle ? shuffleArray(savedPlaylist.videos) : savedPlaylist.videos;
+    setPlaylistState(videos);
+    setCurrentIndex(0);
+    setCurrentVideo(videos[0]);
+    addToRecentlyPlayed(videos[0]);
+    initPlayer(videos[0].id);
+  }, [initPlayer, addToRecentlyPlayed]);
+
   return (
     <AudioPlayerContext.Provider
       value={{
@@ -611,11 +766,15 @@ export const AudioPlayerProvider = ({ children }: { children: ReactNode }) => {
         isMinimized,
         progress,
         duration,
+        volume,
+        isMuted,
         isAutoplay,
+        isShuffle,
         repeatMode,
         playlist,
         recentlyPlayed,
         autoplayQueue,
+        savedPlaylists,
         isQueueBuilding,
         play,
         pause,
@@ -623,7 +782,10 @@ export const AudioPlayerProvider = ({ children }: { children: ReactNode }) => {
         stop,
         toggleMinimize,
         seek,
+        setVolume,
+        toggleMute,
         toggleAutoplay,
+        toggleShuffle,
         setRepeatMode,
         playNext,
         playPrevious,
@@ -632,6 +794,9 @@ export const AudioPlayerProvider = ({ children }: { children: ReactNode }) => {
         skipCurrent,
         removeFromQueue,
         clearQueue,
+        saveQueueAsPlaylist,
+        deletePlaylist,
+        playPlaylist,
       }}
     >
       {children}
