@@ -14,7 +14,203 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      liked_songs: {
+        Row: {
+          channel_title: string | null
+          duration: string | null
+          id: string
+          liked_at: string
+          thumbnail: string | null
+          title: string
+          user_id: string
+          video_id: string
+        }
+        Insert: {
+          channel_title?: string | null
+          duration?: string | null
+          id?: string
+          liked_at?: string
+          thumbnail?: string | null
+          title: string
+          user_id: string
+          video_id: string
+        }
+        Update: {
+          channel_title?: string | null
+          duration?: string | null
+          id?: string
+          liked_at?: string
+          thumbnail?: string | null
+          title?: string
+          user_id?: string
+          video_id?: string
+        }
+        Relationships: []
+      }
+      listening_history: {
+        Row: {
+          channel_title: string | null
+          duration: string | null
+          id: string
+          play_count: number | null
+          played_at: string
+          skip_count: number | null
+          thumbnail: string | null
+          title: string
+          user_id: string
+          video_id: string
+        }
+        Insert: {
+          channel_title?: string | null
+          duration?: string | null
+          id?: string
+          play_count?: number | null
+          played_at?: string
+          skip_count?: number | null
+          thumbnail?: string | null
+          title: string
+          user_id: string
+          video_id: string
+        }
+        Update: {
+          channel_title?: string | null
+          duration?: string | null
+          id?: string
+          play_count?: number | null
+          played_at?: string
+          skip_count?: number | null
+          thumbnail?: string | null
+          title?: string
+          user_id?: string
+          video_id?: string
+        }
+        Relationships: []
+      }
+      playlist_songs: {
+        Row: {
+          added_at: string
+          channel_title: string | null
+          duration: string | null
+          id: string
+          playlist_id: string
+          position: number
+          thumbnail: string | null
+          title: string
+          video_id: string
+        }
+        Insert: {
+          added_at?: string
+          channel_title?: string | null
+          duration?: string | null
+          id?: string
+          playlist_id: string
+          position?: number
+          thumbnail?: string | null
+          title: string
+          video_id: string
+        }
+        Update: {
+          added_at?: string
+          channel_title?: string | null
+          duration?: string | null
+          id?: string
+          playlist_id?: string
+          position?: number
+          thumbnail?: string | null
+          title?: string
+          video_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "playlist_songs_playlist_id_fkey"
+            columns: ["playlist_id"]
+            isOneToOne: false
+            referencedRelation: "playlists"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      playlists: {
+        Row: {
+          cover_url: string | null
+          created_at: string
+          description: string | null
+          id: string
+          is_public: boolean | null
+          name: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          cover_url?: string | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_public?: boolean | null
+          name: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          cover_url?: string | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_public?: boolean | null
+          name?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      profiles: {
+        Row: {
+          avatar_url: string | null
+          created_at: string
+          display_name: string | null
+          id: string
+          preferred_mode: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          avatar_url?: string | null
+          created_at?: string
+          display_name?: string | null
+          id?: string
+          preferred_mode?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          avatar_url?: string | null
+          created_at?: string
+          display_name?: string | null
+          id?: string
+          preferred_mode?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      user_roles: {
+        Row: {
+          id: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Insert: {
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Update: {
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
@@ -23,7 +219,7 @@ export type Database = {
       [_ in never]: never
     }
     Enums: {
-      [_ in never]: never
+      app_role: "user" | "premium"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -150,6 +346,8 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      app_role: ["user", "premium"],
+    },
   },
 } as const
