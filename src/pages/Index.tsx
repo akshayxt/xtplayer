@@ -12,6 +12,8 @@ import RecommendationsGrid from '@/components/RecommendationsGrid';
 import { ApiKeyProvider } from '@/contexts/ApiKeyContext';
 import { AudioPlayerProvider, useAudioPlayer } from '@/contexts/AudioPlayerContext';
 import { ThemeProvider } from '@/contexts/ThemeContext';
+import { AuthProvider } from '@/contexts/AuthContext';
+import { AppModeProvider } from '@/contexts/AppModeContext';
 
 const MainContent = () => {
   const [searchQuery, setSearchQuery] = useState('');
@@ -50,16 +52,24 @@ const Index = () => {
           content="XT Builds - Stream music and videos with background playback. Your premium YouTube music experience with Apple-level UI animations."
         />
         <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+        {/* PWA meta tags for background playback */}
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+        <meta name="mobile-web-app-capable" content="yes" />
       </Helmet>
 
-      <ThemeProvider>
-        <ApiKeyProvider>
-          <AudioPlayerProvider>
-            {showSplash && <SplashScreen onComplete={() => setShowSplash(false)} />}
-            <MainContent />
-          </AudioPlayerProvider>
-        </ApiKeyProvider>
-      </ThemeProvider>
+      <AuthProvider>
+        <AppModeProvider>
+          <ThemeProvider>
+            <ApiKeyProvider>
+              <AudioPlayerProvider>
+                {showSplash && <SplashScreen onComplete={() => setShowSplash(false)} />}
+                <MainContent />
+              </AudioPlayerProvider>
+            </ApiKeyProvider>
+          </ThemeProvider>
+        </AppModeProvider>
+      </AuthProvider>
     </>
   );
 };

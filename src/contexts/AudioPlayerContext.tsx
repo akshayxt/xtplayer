@@ -1,4 +1,5 @@
 // Audio Player Context with intelligent Spotify-like autoplay system
+// Includes Media Session API for background playback on mobile
 import React, { createContext, useContext, useState, useRef, ReactNode, useEffect, useCallback } from 'react';
 
 export interface Video {
@@ -13,6 +14,27 @@ export interface Video {
   mood?: string;
   tempo?: 'slow' | 'medium' | 'fast';
 }
+
+// Media Session API for lock screen controls and background playback
+const updateMediaSession = (video: Video | null, isPlaying: boolean) => {
+  if (!('mediaSession' in navigator) || !video) return;
+
+  navigator.mediaSession.metadata = new MediaMetadata({
+    title: video.title,
+    artist: video.channelTitle,
+    album: 'XT Builds',
+    artwork: [
+      { src: video.thumbnail, sizes: '96x96', type: 'image/jpeg' },
+      { src: video.thumbnail, sizes: '128x128', type: 'image/jpeg' },
+      { src: video.thumbnail, sizes: '192x192', type: 'image/jpeg' },
+      { src: video.thumbnail, sizes: '256x256', type: 'image/jpeg' },
+      { src: video.thumbnail, sizes: '384x384', type: 'image/jpeg' },
+      { src: video.thumbnail, sizes: '512x512', type: 'image/jpeg' },
+    ],
+  });
+
+  navigator.mediaSession.playbackState = isPlaying ? 'playing' : 'paused';
+};
 
 export interface SavedPlaylist {
   id: string;
@@ -467,8 +489,15 @@ export const AudioPlayerProvider = ({ children }: { children: ReactNode }) => {
     const onStateChange = (event: YTPlayerEvent) => {
       if (event.data === 1) {
         setIsPlaying(true);
+        // Update media session for lock screen
+        if (currentVideo) {
+          updateMediaSession(currentVideo, true);
+        }
       } else if (event.data === 2) {
         setIsPlaying(false);
+        if (currentVideo) {
+          updateMediaSession(currentVideo, false);
+        }
       } else if (event.data === 0) {
         setIsPlaying(false);
         setProgress(0);
@@ -599,6 +628,9 @@ export const AudioPlayerProvider = ({ children }: { children: ReactNode }) => {
     setIsMinimized(false);
     addToRecentlyPlayed(analyzed);
     
+    // Update media session for lock screen controls
+    updateMediaSession(analyzed, true);
+    
     // Reset queue for new context
     setAutoplayQueue([]);
     
@@ -629,11 +661,17 @@ export const AudioPlayerProvider = ({ children }: { children: ReactNode }) => {
   const pause = () => {
     playerRef.current?.pauseVideo();
     setIsPlaying(false);
+    if (currentVideo) {
+      updateMediaSession(currentVideo, false);
+    }
   };
 
   const resume = () => {
     playerRef.current?.playVideo();
     setIsPlaying(true);
+    if (currentVideo) {
+      updateMediaSession(currentVideo, true);
+    }
   };
 
   const stop = () => {
@@ -643,7 +681,54 @@ export const AudioPlayerProvider = ({ children }: { children: ReactNode }) => {
     setIsPlaying(false);
     setProgress(0);
     setAutoplayQueue([]);
+    // Clear media session
+    if ('mediaSession' in navigator) {
+      navigator.mediaSession.metadata = null;
+    }
   };
+
+  // Set up Media Session action handlers
+  useEffect(() => {
+    if (!('mediaSession' in navigator)) return;
+
+    const handlers: [MediaSessionAction, MediaSessionActionHandler | null][] = [
+      ['play', () => resume()],
+      ['pause', () => pause()],
+      ['nexttrack', () => playNextRef.current()],
+      ['previoustrack', () => playPrevious()],
+      ['seekto', (details) => {
+        if (details.seekTime !== undefined) {
+          seek(details.seekTime);
+        }
+      }],
+      ['seekbackward', (details) => {
+        const skipTime = details.seekOffset || 10;
+        seek(Math.max(progress - skipTime, 0));
+      }],
+      ['seekforward', (details) => {
+        const skipTime = details.seekOffset || 10;
+        seek(Math.min(progress + skipTime, duration));
+      }],
+    ];
+
+    handlers.forEach(([action, handler]) => {
+      try {
+        navigator.mediaSession.setActionHandler(action, handler);
+      } catch (e) {
+        console.log(`Media Session action "${action}" not supported`);
+      }
+    });
+
+    return () => {
+      handlers.forEach(([action]) => {
+        try {
+          navigator.mediaSession.setActionHandler(action, null);
+        } catch (e) {
+          // Ignore cleanup errors
+        }
+      });
+    };
+  }, [progress, duration, playPrevious]);
 
   const toggleMinimize = () => setIsMinimized(!isMinimized);
 
