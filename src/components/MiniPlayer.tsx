@@ -10,6 +10,7 @@ import { Slider } from '@/components/ui/slider';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import AutoplayQueue from './AutoplayQueue';
+import SyncButton from './SyncButton';
 import { cn } from '@/lib/utils';
 
 const MiniPlayer = () => {
@@ -255,6 +256,8 @@ const MiniPlayer = () => {
 
             {/* Actions */}
             <div className="flex items-center gap-1">
+              <SyncButton />
+
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger asChild>

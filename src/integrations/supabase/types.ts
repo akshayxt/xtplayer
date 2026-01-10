@@ -193,6 +193,142 @@ export type Database = {
         }
         Relationships: []
       }
+      sync_events: {
+        Row: {
+          created_at: string
+          event_type: string
+          id: string
+          payload: Json | null
+          sender_device_id: string
+          session_id: string
+          timestamp: number
+        }
+        Insert: {
+          created_at?: string
+          event_type: string
+          id?: string
+          payload?: Json | null
+          sender_device_id: string
+          session_id: string
+          timestamp: number
+        }
+        Update: {
+          created_at?: string
+          event_type?: string
+          id?: string
+          payload?: Json | null
+          sender_device_id?: string
+          session_id?: string
+          timestamp?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sync_events_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "sync_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      sync_participants: {
+        Row: {
+          device_id: string
+          display_name: string | null
+          id: string
+          is_host: boolean | null
+          joined_at: string
+          last_heartbeat: string
+          latency_ms: number | null
+          session_id: string
+          status: string | null
+          user_id: string | null
+        }
+        Insert: {
+          device_id: string
+          display_name?: string | null
+          id?: string
+          is_host?: boolean | null
+          joined_at?: string
+          last_heartbeat?: string
+          latency_ms?: number | null
+          session_id: string
+          status?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          device_id?: string
+          display_name?: string | null
+          id?: string
+          is_host?: boolean | null
+          joined_at?: string
+          last_heartbeat?: string
+          latency_ms?: number | null
+          session_id?: string
+          status?: string | null
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sync_participants_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "sync_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      sync_sessions: {
+        Row: {
+          created_at: string
+          current_position: number | null
+          current_video_channel: string | null
+          current_video_id: string | null
+          current_video_thumbnail: string | null
+          current_video_title: string | null
+          expires_at: string
+          host_user_id: string
+          id: string
+          is_playing: boolean | null
+          start_timestamp: number | null
+          status: string | null
+          sync_key: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          current_position?: number | null
+          current_video_channel?: string | null
+          current_video_id?: string | null
+          current_video_thumbnail?: string | null
+          current_video_title?: string | null
+          expires_at?: string
+          host_user_id: string
+          id?: string
+          is_playing?: boolean | null
+          start_timestamp?: number | null
+          status?: string | null
+          sync_key: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          current_position?: number | null
+          current_video_channel?: string | null
+          current_video_id?: string | null
+          current_video_thumbnail?: string | null
+          current_video_title?: string | null
+          expires_at?: string
+          host_user_id?: string
+          id?: string
+          is_playing?: boolean | null
+          start_timestamp?: number | null
+          status?: string | null
+          sync_key?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       user_roles: {
         Row: {
           id: string
