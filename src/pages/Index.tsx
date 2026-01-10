@@ -14,6 +14,7 @@ import { AudioPlayerProvider, useAudioPlayer } from '@/contexts/AudioPlayerConte
 import { ThemeProvider } from '@/contexts/ThemeContext';
 import { AuthProvider } from '@/contexts/AuthContext';
 import { AppModeProvider } from '@/contexts/AppModeContext';
+import { MusicSyncProvider } from '@/contexts/MusicSyncContext';
 
 const MainContent = () => {
   const [searchQuery, setSearchQuery] = useState('');
@@ -63,8 +64,10 @@ const Index = () => {
           <ThemeProvider>
             <ApiKeyProvider>
               <AudioPlayerProvider>
-                {showSplash && <SplashScreen onComplete={() => setShowSplash(false)} />}
-                <MainContent />
+                <MusicSyncProvider>
+                  {showSplash && <SplashScreen onComplete={() => setShowSplash(false)} />}
+                  <MainContent />
+                </MusicSyncProvider>
               </AudioPlayerProvider>
             </ApiKeyProvider>
           </ThemeProvider>
