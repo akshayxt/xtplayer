@@ -1,8 +1,11 @@
 import { useState, useEffect } from 'react';
-import { Play, TrendingUp, Music2, Disc3, Sparkles, Radio } from 'lucide-react';
+import { Play, TrendingUp, Music2, Disc3, Sparkles, Radio, Plus } from 'lucide-react';
 import { useFreeMusicCatalog, type FreeTrack, type CuratedPlaylist } from '@/hooks/useFreeMusicCatalog';
 import { useAudioPlayer } from '@/contexts/AudioPlayerContext';
+import { useAuth } from '@/contexts/AuthContext';
 import { Skeleton } from '@/components/ui/skeleton';
+import UserPlaylistsSection from './UserPlaylistsSection';
+import AddToPlaylistModal from './AddToPlaylistModal';
 import { cn } from '@/lib/utils';
 
 const YTMusicHome = () => {
@@ -84,6 +87,9 @@ const YTMusicHome = () => {
 
   return (
     <div className="space-y-8">
+      {/* User's Playlists */}
+      <UserPlaylistsSection />
+
       {/* Quick Picks / Trending */}
       <section>
         <h2 className="text-xl font-bold text-foreground mb-4 flex items-center gap-2">
