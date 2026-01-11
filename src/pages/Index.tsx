@@ -9,30 +9,43 @@ import RecentlyPlayedGrid from '@/components/RecentlyPlayedGrid';
 import TrendingGrid from '@/components/TrendingGrid';
 import PlaylistsGrid from '@/components/PlaylistsGrid';
 import RecommendationsGrid from '@/components/RecommendationsGrid';
+import YTMusicHome from '@/components/YTMusicHome';
+import YTMusicSearch from '@/components/YTMusicSearch';
 import { ApiKeyProvider } from '@/contexts/ApiKeyContext';
 import { AudioPlayerProvider, useAudioPlayer } from '@/contexts/AudioPlayerContext';
 import { ThemeProvider } from '@/contexts/ThemeContext';
 import { AuthProvider } from '@/contexts/AuthContext';
-import { AppModeProvider } from '@/contexts/AppModeContext';
+import { AppModeProvider, useAppMode } from '@/contexts/AppModeContext';
 import { MusicSyncProvider } from '@/contexts/MusicSyncContext';
 
 const MainContent = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const { currentVideo } = useAudioPlayer();
+  const { isYTMusicMode } = useAppMode();
 
   return (
     <div className={`min-h-screen flex flex-col bg-background ${currentVideo ? 'pb-24' : ''}`}>
       <Header onSearch={setSearchQuery} searchQuery={searchQuery} />
       <main className="container px-4 py-8 flex-1 page-transition">
-        {searchQuery ? (
-          <VideoGrid searchQuery={searchQuery} />
+        {isYTMusicMode ? (
+          // YT Music Mode - Free music, no API key required
+          searchQuery ? (
+            <YTMusicSearch searchQuery={searchQuery} />
+          ) : (
+            <YTMusicHome />
+          )
         ) : (
-          <>
-            <RecentlyPlayedGrid />
-            <TrendingGrid />
-            <PlaylistsGrid />
-            <RecommendationsGrid />
-          </>
+          // API Mode - Requires YouTube API key
+          searchQuery ? (
+            <VideoGrid searchQuery={searchQuery} />
+          ) : (
+            <>
+              <RecentlyPlayedGrid />
+              <TrendingGrid />
+              <PlaylistsGrid />
+              <RecommendationsGrid />
+            </>
+          )
         )}
       </main>
       <ContactSection />

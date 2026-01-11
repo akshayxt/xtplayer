@@ -1,5 +1,6 @@
 // Audio Player Context with intelligent Spotify-like autoplay system
 // Includes Media Session API for background playback on mobile
+// Supports both YouTube (via IFrame API) and direct audio streaming (for free music)
 import React, { createContext, useContext, useState, useRef, ReactNode, useEffect, useCallback } from 'react';
 
 export interface Video {
@@ -13,6 +14,8 @@ export interface Video {
   genre?: string;
   mood?: string;
   tempo?: 'slow' | 'medium' | 'fast';
+  // Direct audio URL (for free music mode)
+  streamUrl?: string;
 }
 
 // Media Session API for lock screen controls and background playback
@@ -226,12 +229,14 @@ export const AudioPlayerProvider = ({ children }: { children: ReactNode }) => {
   const [currentIndex, setCurrentIndex] = useState(-1);
   
   const playerRef = useRef<YTPlayer | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null); // For direct audio streaming
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const playNextRef = useRef<() => void>(() => {});
   const skipDataRef = useRef<Map<string, number>>(new Map());
   const apiKeyRef = useRef<string>('');
   const preloadTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const previousVolumeRef = useRef<number>(DEFAULT_VOLUME);
+  const isDirectAudioRef = useRef<boolean>(false); // Track if using direct audio
 
   // Load data from localStorage
   useEffect(() => {
@@ -452,15 +457,85 @@ export const AudioPlayerProvider = ({ children }: { children: ReactNode }) => {
     };
   }, []);
 
-  // Apply volume to player
+  // Apply volume to player (both YT and direct audio)
   const applyVolume = useCallback((vol: number) => {
     if (playerRef.current) {
       playerRef.current.setVolume(vol);
     }
+    if (audioRef.current) {
+      audioRef.current.volume = vol / 100;
+    }
   }, []);
 
-  // Initialize player
+  // Initialize direct audio player (for free music)
+  const initDirectAudio = useCallback((streamUrl: string, video: Video) => {
+    // Clean up YouTube player if exists
+    if (playerRef.current) {
+      playerRef.current.destroy();
+      playerRef.current = null;
+    }
+    
+    isDirectAudioRef.current = true;
+    
+    // Create or reuse audio element
+    if (!audioRef.current) {
+      audioRef.current = new Audio();
+    }
+    
+    const audio = audioRef.current;
+    audio.src = streamUrl;
+    audio.volume = isMuted ? 0 : volume / 100;
+    
+    // Set up event handlers
+    audio.onloadedmetadata = () => {
+      setDuration(audio.duration);
+    };
+    
+    audio.onplay = () => {
+      setIsPlaying(true);
+      updateMediaSession(video, true);
+    };
+    
+    audio.onpause = () => {
+      setIsPlaying(false);
+      updateMediaSession(video, false);
+    };
+    
+    audio.onended = () => {
+      setIsPlaying(false);
+      setProgress(0);
+      playNextRef.current();
+    };
+    
+    audio.onerror = (e) => {
+      console.error('[DirectAudio] Playback error:', e);
+      // Try next song on error
+      playNextRef.current();
+    };
+    
+    // Start playback
+    audio.play().catch(e => {
+      console.error('[DirectAudio] Failed to start:', e);
+    });
+    
+    // Progress tracking
+    if (intervalRef.current) clearInterval(intervalRef.current);
+    intervalRef.current = setInterval(() => {
+      if (audioRef.current) {
+        setProgress(audioRef.current.currentTime);
+      }
+    }, 500);
+  }, [volume, isMuted]);
+
+  // Initialize YouTube player
   const initPlayer = useCallback((videoId: string) => {
+    // Clean up direct audio if exists
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.src = '';
+    }
+    isDirectAudioRef.current = false;
+    
     if (playerRef.current) {
       playerRef.current.destroy();
     }
@@ -538,7 +613,7 @@ export const AudioPlayerProvider = ({ children }: { children: ReactNode }) => {
     };
 
     checkYT();
-  }, [autoplayQueue, volume, isMuted]);
+  }, [autoplayQueue, volume, isMuted, currentVideo]);
 
   // Play next logic
   const playNext = useCallback(() => {
@@ -610,20 +685,35 @@ export const AudioPlayerProvider = ({ children }: { children: ReactNode }) => {
   // Play previous
   const playPrevious = useCallback(() => {
     if (progress > 3) {
-      playerRef.current?.seekTo(0, true);
+      if (isDirectAudioRef.current && audioRef.current) {
+        audioRef.current.currentTime = 0;
+      } else {
+        playerRef.current?.seekTo(0, true);
+      }
       setProgress(0);
     } else if (currentIndex > 0) {
       const prevVideo = playlist[currentIndex - 1];
       setCurrentIndex(prev => prev - 1);
       setCurrentVideo(prevVideo);
       addToRecentlyPlayed(prevVideo);
-      initPlayer(prevVideo.id);
+      
+      // Check if direct audio or YouTube
+      if (prevVideo.streamUrl) {
+        initDirectAudio(prevVideo.streamUrl, prevVideo);
+      } else {
+        initPlayer(prevVideo.id);
+      }
     }
-  }, [currentIndex, playlist, progress, initPlayer, addToRecentlyPlayed]);
+  }, [currentIndex, playlist, progress, initPlayer, initDirectAudio, addToRecentlyPlayed]);
 
-  // Main play function
+  // Main play function - supports both YouTube and direct audio
   const play = useCallback((video: Video) => {
     const analyzed = analyzeVideo(video);
+    // Preserve streamUrl if present
+    if (video.streamUrl) {
+      analyzed.streamUrl = video.streamUrl;
+    }
+    
     setCurrentVideo(analyzed);
     setIsMinimized(false);
     addToRecentlyPlayed(analyzed);
@@ -642,13 +732,18 @@ export const AudioPlayerProvider = ({ children }: { children: ReactNode }) => {
       setCurrentIndex(playlist.length);
     }
     
-    initPlayer(video.id);
+    // Use direct audio for free music, YouTube for API mode
+    if (video.streamUrl) {
+      initDirectAudio(video.streamUrl, analyzed);
+    } else {
+      initPlayer(video.id);
+    }
     
-    // Build autoplay queue in background
-    if (isAutoplay) {
+    // Build autoplay queue in background (only for YouTube mode)
+    if (isAutoplay && !video.streamUrl) {
       setTimeout(() => buildAutoplayQueue(analyzed), 1000);
     }
-  }, [initPlayer, addToRecentlyPlayed, playlist, isAutoplay, buildAutoplayQueue]);
+  }, [initPlayer, initDirectAudio, addToRecentlyPlayed, playlist, isAutoplay, buildAutoplayQueue]);
 
   // Skip current (with learning)
   const skipCurrent = useCallback(() => {
@@ -659,7 +754,11 @@ export const AudioPlayerProvider = ({ children }: { children: ReactNode }) => {
   }, [currentVideo, recordSkip, playNext]);
 
   const pause = () => {
-    playerRef.current?.pauseVideo();
+    if (isDirectAudioRef.current && audioRef.current) {
+      audioRef.current.pause();
+    } else {
+      playerRef.current?.pauseVideo();
+    }
     setIsPlaying(false);
     if (currentVideo) {
       updateMediaSession(currentVideo, false);
@@ -667,7 +766,11 @@ export const AudioPlayerProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const resume = () => {
-    playerRef.current?.playVideo();
+    if (isDirectAudioRef.current && audioRef.current) {
+      audioRef.current.play();
+    } else {
+      playerRef.current?.playVideo();
+    }
     setIsPlaying(true);
     if (currentVideo) {
       updateMediaSession(currentVideo, true);
@@ -676,11 +779,20 @@ export const AudioPlayerProvider = ({ children }: { children: ReactNode }) => {
 
   const stop = () => {
     if (intervalRef.current) clearInterval(intervalRef.current);
-    playerRef.current?.stopVideo();
+    
+    if (isDirectAudioRef.current && audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.src = '';
+    } else {
+      playerRef.current?.stopVideo();
+    }
+    
     setCurrentVideo(null);
     setIsPlaying(false);
     setProgress(0);
     setAutoplayQueue([]);
+    isDirectAudioRef.current = false;
+    
     // Clear media session
     if ('mediaSession' in navigator) {
       navigator.mediaSession.metadata = null;
@@ -733,7 +845,11 @@ export const AudioPlayerProvider = ({ children }: { children: ReactNode }) => {
   const toggleMinimize = () => setIsMinimized(!isMinimized);
 
   const seek = (time: number) => {
-    playerRef.current?.seekTo(time, true);
+    if (isDirectAudioRef.current && audioRef.current) {
+      audioRef.current.currentTime = time;
+    } else {
+      playerRef.current?.seekTo(time, true);
+    }
     setProgress(time);
   };
 
