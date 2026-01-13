@@ -4,11 +4,13 @@ import { useYTMusicAPI, type YTSong, type HomeFeed } from '@/hooks/useYTMusicAPI
 import { useAudioPlayer } from '@/contexts/AudioPlayerContext';
 import { Skeleton } from '@/components/ui/skeleton';
 import UserPlaylistsSection from './UserPlaylistsSection';
+import ArtistProfileModal from './ArtistProfileModal';
 import { cn } from '@/lib/utils';
 
 const YTMusicHomeNew = () => {
   const [homeFeed, setHomeFeed] = useState<HomeFeed | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [selectedArtist, setSelectedArtist] = useState<{ name: string; channelId?: string } | null>(null);
   const { getHomeFeed, toVideoFormat, getRelated } = useYTMusicAPI();
   const { play, currentVideo, isPlaying, setPlaylist } = useAudioPlayer();
 
@@ -178,12 +180,18 @@ const YTMusicHomeNew = () => {
                 <h3 className="mt-2 text-sm font-medium text-foreground line-clamp-2">
                   {song.title}
                 </h3>
-                <p className="text-xs text-muted-foreground line-clamp-1 flex items-center gap-1">
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setSelectedArtist({ name: song.artist });
+                  }}
+                  className="text-xs text-muted-foreground hover:text-primary hover:underline line-clamp-1 flex items-center gap-1 text-left transition-colors"
+                >
                   {song.artist}
                   {song.isOfficial && (
                     <span className="text-[10px] bg-primary/10 text-primary px-1 rounded">OFFICIAL</span>
                   )}
-                </p>
+                </button>
               </div>
             );
           })}
@@ -260,9 +268,15 @@ const YTMusicHomeNew = () => {
                     <h3 className="mt-2 text-sm font-medium text-foreground line-clamp-2">
                       {song.title}
                     </h3>
-                    <p className="text-xs text-muted-foreground line-clamp-1">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setSelectedArtist({ name: song.artist });
+                      }}
+                      className="text-xs text-muted-foreground hover:text-primary hover:underline line-clamp-1 text-left transition-colors"
+                    >
                       {song.artist}
-                    </p>
+                    </button>
                   </div>
                 );
               })}
@@ -283,6 +297,14 @@ const YTMusicHomeNew = () => {
           </p>
         </div>
       </div>
+
+      {/* Artist Profile Modal */}
+      <ArtistProfileModal
+        artistName={selectedArtist?.name || ''}
+        channelId={selectedArtist?.channelId}
+        isOpen={!!selectedArtist}
+        onClose={() => setSelectedArtist(null)}
+      />
     </div>
   );
 };

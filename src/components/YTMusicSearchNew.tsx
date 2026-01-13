@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { Play, Loader2, Search, Music, CheckCircle, TrendingUp } from 'lucide-react';
 import { useYTMusicAPI, type YTSong } from '@/hooks/useYTMusicAPI';
 import { useAudioPlayer } from '@/contexts/AudioPlayerContext';
+import ArtistProfileModal from './ArtistProfileModal';
 import { cn } from '@/lib/utils';
 
 interface YTMusicSearchNewProps {
@@ -12,6 +13,7 @@ const YTMusicSearchNew = ({ searchQuery }: YTMusicSearchNewProps) => {
   const [results, setResults] = useState<YTSong[]>([]);
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [isSearching, setIsSearching] = useState(false);
+  const [selectedArtist, setSelectedArtist] = useState<{ name: string; channelId?: string } | null>(null);
   const { search, getSuggestions, toVideoFormat } = useYTMusicAPI();
   const { play, currentVideo, isPlaying, setPlaylist } = useAudioPlayer();
   const searchTimeoutRef = useRef<NodeJS.Timeout>();
@@ -168,9 +170,15 @@ const YTMusicSearchNew = ({ searchQuery }: YTMusicSearchNewProps) => {
                     {song.title}
                   </h3>
                   <div className="flex items-center gap-1 mt-1">
-                    <p className="text-xs text-muted-foreground line-clamp-1">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setSelectedArtist({ name: song.artist });
+                      }}
+                      className="text-xs text-muted-foreground hover:text-primary hover:underline line-clamp-1 text-left transition-colors"
+                    >
                       {song.artist}
-                    </p>
+                    </button>
                     {song.isVerified && (
                       <CheckCircle className="w-3 h-3 text-primary flex-shrink-0" />
                     )}
@@ -202,6 +210,14 @@ const YTMusicSearchNew = ({ searchQuery }: YTMusicSearchNewProps) => {
           );
         })}
       </div>
+
+      {/* Artist Profile Modal */}
+      <ArtistProfileModal
+        artistName={selectedArtist?.name || ''}
+        channelId={selectedArtist?.channelId}
+        isOpen={!!selectedArtist}
+        onClose={() => setSelectedArtist(null)}
+      />
     </div>
   );
 };
