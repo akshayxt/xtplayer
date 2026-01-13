@@ -9,8 +9,8 @@ import RecentlyPlayedGrid from '@/components/RecentlyPlayedGrid';
 import TrendingGrid from '@/components/TrendingGrid';
 import PlaylistsGrid from '@/components/PlaylistsGrid';
 import RecommendationsGrid from '@/components/RecommendationsGrid';
-import YTMusicHome from '@/components/YTMusicHome';
-import YTMusicSearch from '@/components/YTMusicSearch';
+import YTMusicHomeNew from '@/components/YTMusicHomeNew';
+import YTMusicSearchNew from '@/components/YTMusicSearchNew';
 import { ApiKeyProvider } from '@/contexts/ApiKeyContext';
 import { AudioPlayerProvider, useAudioPlayer } from '@/contexts/AudioPlayerContext';
 import { ThemeProvider } from '@/contexts/ThemeContext';
@@ -28,11 +28,11 @@ const MainContent = () => {
       <Header onSearch={setSearchQuery} searchQuery={searchQuery} />
       <main className="container px-4 py-8 flex-1 page-transition">
         {isYTMusicMode ? (
-          // YT Music Mode - Free music, no API key required
+          // YT Music Mode - YouTube Music, no API key required
           searchQuery ? (
-            <YTMusicSearch searchQuery={searchQuery} />
+            <YTMusicSearchNew searchQuery={searchQuery} />
           ) : (
-            <YTMusicHome />
+            <YTMusicHomeNew />
           )
         ) : (
           // API Mode - Requires YouTube API key
