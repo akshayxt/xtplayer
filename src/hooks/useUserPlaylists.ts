@@ -220,6 +220,8 @@ export const useUserPlaylists = () => {
     }
 
     try {
+      console.log('[ImportPlaylist] Importing from URL:', url);
+      
       const { data, error } = await supabase.functions.invoke('import-playlist', {
         body: { url }
       });
@@ -228,6 +230,13 @@ export const useUserPlaylists = () => {
       if (data.error) throw new Error(data.error);
 
       const importData = data.data;
+      
+      console.log('[ImportPlaylist] Received data:', importData);
+      
+      if (!importData || !importData.tracks || importData.tracks.length === 0) {
+        toast.error(importData?.note || 'No tracks found in playlist');
+        return null;
+      }
       
       // Create the playlist
       const playlist = await createPlaylist(
@@ -238,22 +247,34 @@ export const useUserPlaylists = () => {
       if (!playlist) return null;
 
       // Add tracks to playlist
+      let addedCount = 0;
       for (const track of importData.tracks) {
-        await addSongToPlaylist(playlist.id, track);
+        // Convert to format expected by addSongToPlaylist
+        const trackData = {
+          id: track.videoId || track.id,
+          title: track.title,
+          artist: track.artist,
+          thumbnail: track.thumbnail,
+          duration: track.duration,
+        };
+        
+        const success = await addSongToPlaylist(playlist.id, trackData);
+        if (success) addedCount++;
       }
 
       if (importData.note) {
         toast.info(importData.note);
       }
 
-      toast.success(`Imported ${importData.tracks.length} tracks!`);
+      toast.success(`Imported ${addedCount} tracks to "${importData.name}"!`);
+      await fetchPlaylists();
       return playlist;
     } catch (error) {
       console.error('Failed to import playlist:', error);
       toast.error(error instanceof Error ? error.message : 'Failed to import playlist');
       return null;
     }
-  }, [user, createPlaylist, addSongToPlaylist]);
+  }, [user, createPlaylist, addSongToPlaylist, fetchPlaylists]);
 
   // Search for songs to add
   const searchSongs = useCallback(async (query: string) => {
