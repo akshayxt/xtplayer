@@ -5,155 +5,412 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const JAMENDO_CLIENT_ID = "b6747d04";
-
-interface TrackInfo {
-  title: string;
-  artist: string;
-}
-
-interface ImportedTrack {
+interface ParsedTrack {
   id: string;
   title: string;
   artist: string;
   thumbnail: string;
-  streamUrl: string;
-  duration: number;
-  matchScore: number;
+  duration?: number;
+  videoId?: string;
 }
 
-// Parse Spotify playlist URL using oEmbed (public, no API key needed)
-async function parseSpotifyPlaylist(url: string): Promise<{ name: string; tracks: TrackInfo[] }> {
-  try {
-    // Get playlist info via oEmbed
-    const oembedUrl = `https://open.spotify.com/oembed?url=${encodeURIComponent(url)}`;
-    const oembedRes = await fetch(oembedUrl);
-    
-    if (!oembedRes.ok) {
-      throw new Error("Could not fetch Spotify playlist info");
-    }
-    
-    const oembedData = await oembedRes.json();
-    const playlistName = oembedData.title || "Imported Spotify Playlist";
-    
-    // Unfortunately, oEmbed doesn't give us track list
-    // We need to use Spotify's public page and parse it
-    // This is a limitation - we'll return the playlist name and ask user to manually search
-    
-    return {
-      name: playlistName,
-      tracks: [], // Can't get tracks without API key
-    };
-  } catch (error) {
-    console.error("Spotify parse error:", error);
-    throw new Error("Failed to parse Spotify playlist. Make sure the playlist is public.");
-  }
+interface PlaylistData {
+  name: string;
+  source: 'youtube' | 'spotify';
+  tracks: ParsedTrack[];
+  note?: string;
 }
 
-// Parse YouTube playlist using public data
-async function parseYouTubePlaylist(url: string): Promise<{ name: string; tracks: TrackInfo[] }> {
-  try {
-    // Extract playlist ID from URL
-    const urlObj = new URL(url);
-    const playlistId = urlObj.searchParams.get("list");
-    
-    if (!playlistId) {
-      throw new Error("Invalid YouTube playlist URL");
-    }
-    
-    // Try to get playlist info via oEmbed
-    const oembedUrl = `https://www.youtube.com/oembed?url=${encodeURIComponent(url)}&format=json`;
-    const oembedRes = await fetch(oembedUrl);
-    
-    let playlistName = "Imported YouTube Playlist";
-    if (oembedRes.ok) {
-      const oembedData = await oembedRes.json();
-      playlistName = oembedData.title || playlistName;
-    }
-    
-    return {
-      name: playlistName,
-      tracks: [], // Can't get individual tracks without API key
-    };
-  } catch (error) {
-    console.error("YouTube parse error:", error);
-    throw new Error("Failed to parse YouTube playlist. Make sure the playlist is public.");
-  }
-}
-
-// Search Jamendo for matching tracks
-async function searchJamendo(query: string, limit: number = 5): Promise<ImportedTrack[]> {
-  try {
-    const response = await fetch(
-      `https://api.jamendo.com/v3.0/tracks/?client_id=${JAMENDO_CLIENT_ID}&format=json&limit=${limit}&search=${encodeURIComponent(query)}&include=musicinfo&imagesize=400`
-    );
-    const data = await response.json();
-    
-    if (data.results) {
-      return data.results.map((track: any) => ({
-        id: track.id,
-        title: track.name,
-        artist: track.artist_name,
-        thumbnail: track.image || track.album_image || `https://picsum.photos/seed/${track.id}/400/400`,
-        streamUrl: track.audio,
-        duration: track.duration,
-        matchScore: 0.8, // Approximate match
-      }));
-    }
-    return [];
-  } catch (error) {
-    console.error("Jamendo search error:", error);
-    return [];
-  }
-}
-
-// Find similar tracks in Jamendo for imported playlist
-async function findSimilarTracks(tracks: TrackInfo[]): Promise<ImportedTrack[]> {
-  const results: ImportedTrack[] = [];
+// Extract Spotify playlist ID from URL
+function extractSpotifyPlaylistId(url: string): string | null {
+  const patterns = [
+    /spotify\.com\/playlist\/([a-zA-Z0-9]+)/,
+    /spotify\.com\/embed\/playlist\/([a-zA-Z0-9]+)/,
+    /open\.spotify\.com\/playlist\/([a-zA-Z0-9]+)/,
+  ];
   
-  for (const track of tracks.slice(0, 20)) { // Limit to 20 tracks
-    const query = `${track.title} ${track.artist}`.trim();
-    const matches = await searchJamendo(query, 1);
+  for (const pattern of patterns) {
+    const match = url.match(pattern);
+    if (match) return match[1];
+  }
+  return null;
+}
+
+// Extract YouTube playlist ID from URL
+function extractYouTubePlaylistId(url: string): string | null {
+  const patterns = [
+    /[?&]list=([a-zA-Z0-9_-]+)/,
+    /youtube\.com\/playlist\?list=([a-zA-Z0-9_-]+)/,
+    /youtu\.be\/.*\?list=([a-zA-Z0-9_-]+)/,
+  ];
+  
+  for (const pattern of patterns) {
+    const match = url.match(pattern);
+    if (match) return match[1];
+  }
+  return null;
+}
+
+// Parse YouTube playlist and extract track info
+async function parseYouTubePlaylist(playlistId: string): Promise<PlaylistData> {
+  try {
+    console.log(`[ImportPlaylist] Parsing YouTube playlist: ${playlistId}`);
     
-    if (matches.length > 0) {
-      results.push(matches[0]);
+    // Fetch the playlist page
+    const response = await fetch(`https://www.youtube.com/playlist?list=${playlistId}`, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept-Language': 'en-US,en;q=0.9',
+      }
+    });
+
+    const html = await response.text();
+    
+    // Extract ytInitialData
+    const dataMatch = html.match(/var ytInitialData = ({.*?});<\/script>/s) || 
+                      html.match(/ytInitialData\s*=\s*({.*?});/s);
+    
+    if (!dataMatch) {
+      console.log("[ImportPlaylist] Could not find ytInitialData for playlist");
+      return { name: "YouTube Playlist", source: 'youtube', tracks: [], note: "Could not parse playlist data" };
+    }
+
+    const data = JSON.parse(dataMatch[1]);
+    const tracks: ParsedTrack[] = [];
+
+    // Get playlist title
+    const playlistTitle = data?.metadata?.playlistMetadataRenderer?.title || 
+                         data?.header?.playlistHeaderRenderer?.title?.simpleText ||
+                         "YouTube Playlist";
+
+    console.log(`[ImportPlaylist] Found playlist: ${playlistTitle}`);
+
+    // Navigate to playlist items - try multiple paths
+    let contents = data?.contents?.twoColumnBrowseResultsRenderer?.tabs?.[0]?.tabRenderer?.content?.sectionListRenderer?.contents?.[0]?.itemSectionRenderer?.contents?.[0]?.playlistVideoListRenderer?.contents || [];
+    
+    // Alternative path for some playlist layouts
+    if (contents.length === 0) {
+      contents = data?.contents?.twoColumnBrowseResultsRenderer?.tabs?.[0]?.tabRenderer?.content?.sectionListRenderer?.contents?.[0]?.playlistVideoListRenderer?.contents || [];
+    }
+    
+    // Another alternative path
+    if (contents.length === 0) {
+      const sectionContents = data?.contents?.twoColumnBrowseResultsRenderer?.tabs?.[0]?.tabRenderer?.content?.sectionListRenderer?.contents || [];
+      for (const section of sectionContents) {
+        const playlistRenderer = section?.itemSectionRenderer?.contents?.[0]?.playlistVideoListRenderer;
+        if (playlistRenderer?.contents) {
+          contents = playlistRenderer.contents;
+          break;
+        }
+      }
+    }
+
+    console.log(`[ImportPlaylist] Found ${contents.length} items in playlist`);
+
+    for (const item of contents) {
+      const videoRenderer = item.playlistVideoRenderer;
+      if (!videoRenderer) continue;
+
+      const videoId = videoRenderer.videoId;
+      if (!videoId) continue;
+
+      const title = videoRenderer.title?.runs?.[0]?.text || "";
+      const channelName = videoRenderer.shortBylineText?.runs?.[0]?.text || 
+                         videoRenderer.longBylineText?.runs?.[0]?.text || "";
+      const thumbnail = videoRenderer.thumbnail?.thumbnails?.slice(-1)?.[0]?.url || 
+                       `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`;
+      
+      // Parse duration
+      const durationText = videoRenderer.lengthText?.simpleText || "";
+      let duration = 0;
+      if (durationText) {
+        const parts = durationText.split(':').map(Number);
+        if (parts.length === 2) {
+          duration = parts[0] * 60 + parts[1];
+        } else if (parts.length === 3) {
+          duration = parts[0] * 3600 + parts[1] * 60 + parts[2];
+        }
+      }
+
+      tracks.push({
+        id: videoId,
+        title: title,
+        artist: channelName,
+        thumbnail,
+        duration,
+        videoId,
+      });
+    }
+
+    console.log(`[ImportPlaylist] Parsed ${tracks.length} tracks from YouTube playlist`);
+
+    return {
+      name: playlistTitle,
+      source: 'youtube',
+      tracks,
+      note: tracks.length > 0 ? undefined : "No playable tracks found in this playlist"
+    };
+  } catch (error) {
+    console.error("[ImportPlaylist] YouTube playlist parse error:", error);
+    return { name: "YouTube Playlist", source: 'youtube', tracks: [], note: "Failed to parse playlist" };
+  }
+}
+
+// Parse Spotify playlist using embed page
+async function parseSpotifyPlaylist(playlistId: string): Promise<PlaylistData> {
+  try {
+    console.log(`[ImportPlaylist] Parsing Spotify playlist: ${playlistId}`);
+    
+    // Use Spotify's embed page to get track info
+    const embedResponse = await fetch(`https://open.spotify.com/embed/playlist/${playlistId}`, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'Accept-Language': 'en-US,en;q=0.9',
+      }
+    });
+
+    const html = await embedResponse.text();
+    
+    // Extract __NEXT_DATA__ or resource data
+    const nextDataMatch = html.match(/<script id="__NEXT_DATA__"[^>]*>({.*?})<\/script>/s);
+    
+    let playlistName = "Spotify Playlist";
+    const tracks: ParsedTrack[] = [];
+
+    if (nextDataMatch) {
+      try {
+        const nextData = JSON.parse(nextDataMatch[1]);
+        const entity = nextData?.props?.pageProps?.state?.data?.entity;
+        
+        if (entity) {
+          playlistName = entity.name || playlistName;
+          console.log(`[ImportPlaylist] Found Spotify playlist: ${playlistName}`);
+          
+          // Extract tracks from entity
+          const trackList = entity.trackList || [];
+          for (const track of trackList) {
+            if (track.title && track.subtitle) {
+              tracks.push({
+                id: track.uid || `spotify_${Date.now()}_${Math.random()}`,
+                title: track.title,
+                artist: track.subtitle,
+                thumbnail: track.images?.[0]?.url || "",
+                duration: track.duration ? Math.floor(track.duration / 1000) : undefined,
+              });
+            }
+          }
+        }
+      } catch (e) {
+        console.error("[ImportPlaylist] Failed to parse __NEXT_DATA__:", e);
+      }
+    }
+
+    // Fallback: try oembed for playlist name
+    if (playlistName === "Spotify Playlist") {
+      try {
+        const oembedResponse = await fetch(`https://open.spotify.com/oembed?url=https://open.spotify.com/playlist/${playlistId}`);
+        const oembedData = await oembedResponse.json();
+        if (oembedData.title) {
+          playlistName = oembedData.title;
+        }
+      } catch (e) {
+        console.error("[ImportPlaylist] Failed to fetch oembed:", e);
+      }
+    }
+
+    console.log(`[ImportPlaylist] Parsed ${tracks.length} tracks from Spotify playlist`);
+
+    // If we have tracks, find YouTube versions
+    if (tracks.length > 0) {
+      const ytTracks = await findYouTubeMatches(tracks);
+      return {
+        name: playlistName,
+        source: 'spotify',
+        tracks: ytTracks,
+        note: ytTracks.length < tracks.length 
+          ? `Found ${ytTracks.length} of ${tracks.length} tracks on YouTube`
+          : undefined
+      };
+    }
+
+    return {
+      name: playlistName,
+      source: 'spotify',
+      tracks: [],
+      note: "Spotify playlist parsed but track details require authentication. Try importing a YouTube playlist instead."
+    };
+  } catch (error) {
+    console.error("[ImportPlaylist] Spotify playlist parse error:", error);
+    return { name: "Spotify Playlist", source: 'spotify', tracks: [], note: "Failed to parse playlist" };
+  }
+}
+
+// Search YouTube for matching tracks
+async function searchYouTubeForTrack(query: string): Promise<ParsedTrack | null> {
+  try {
+    const searchUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(query + " official audio")}&sp=EgIQAQ%253D%253D`;
+    
+    const response = await fetch(searchUrl, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'Accept-Language': 'en-US,en;q=0.9',
+      }
+    });
+
+    const html = await response.text();
+    const dataMatch = html.match(/var ytInitialData = ({.*?});<\/script>/s) || 
+                      html.match(/ytInitialData\s*=\s*({.*?});/s);
+    
+    if (!dataMatch) return null;
+
+    const data = JSON.parse(dataMatch[1]);
+    const contents = data?.contents?.twoColumnSearchResultsRenderer?.primaryContents?.sectionListRenderer?.contents;
+    
+    if (!contents) return null;
+
+    for (const section of contents) {
+      const items = section?.itemSectionRenderer?.contents || [];
+      
+      for (const item of items) {
+        const videoRenderer = item.videoRenderer;
+        if (!videoRenderer) continue;
+
+        const videoId = videoRenderer.videoId;
+        if (!videoId) continue;
+
+        const title = videoRenderer.title?.runs?.[0]?.text || "";
+        const channelName = videoRenderer.ownerText?.runs?.[0]?.text || "";
+        const thumbnail = `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`;
+        
+        const durationText = videoRenderer.lengthText?.simpleText || "";
+        let duration = 0;
+        if (durationText) {
+          const parts = durationText.split(':').map(Number);
+          if (parts.length === 2) {
+            duration = parts[0] * 60 + parts[1];
+          }
+        }
+
+        // Return the first music result
+        return {
+          id: videoId,
+          title,
+          artist: channelName,
+          thumbnail,
+          duration,
+          videoId,
+        };
+      }
+    }
+
+    return null;
+  } catch (error) {
+    console.error("[ImportPlaylist] YouTube search error:", error);
+    return null;
+  }
+}
+
+// Find YouTube videos for Spotify tracks
+async function findYouTubeMatches(tracks: ParsedTrack[]): Promise<ParsedTrack[]> {
+  const results: ParsedTrack[] = [];
+  
+  // Process in parallel with rate limiting
+  const batchSize = 3;
+  for (let i = 0; i < Math.min(tracks.length, 25); i += batchSize) {
+    const batch = tracks.slice(i, i + batchSize);
+    const promises = batch.map(async (track) => {
+      const query = `${track.artist} ${track.title}`;
+      const result = await searchYouTubeForTrack(query);
+      if (result) {
+        return {
+          ...result,
+          title: track.title, // Keep original title
+          artist: track.artist, // Keep original artist
+        };
+      }
+      return null;
+    });
+    
+    const batchResults = await Promise.all(promises);
+    results.push(...batchResults.filter((r): r is ParsedTrack => r !== null));
+    
+    // Small delay between batches
+    if (i + batchSize < tracks.length) {
+      await new Promise(resolve => setTimeout(resolve, 200));
     }
   }
   
   return results;
 }
 
-// Get curated tracks based on playlist theme (when we can't parse tracks)
-async function getCuratedTracks(playlistName: string, count: number = 10): Promise<ImportedTrack[]> {
-  // Extract keywords from playlist name
-  const keywords = playlistName.toLowerCase();
-  
-  // Determine genre/mood based on keywords
-  let searchQuery = "popular music";
-  
-  if (keywords.includes("chill") || keywords.includes("relax")) {
-    searchQuery = "chillout ambient";
-  } else if (keywords.includes("workout") || keywords.includes("gym") || keywords.includes("energy")) {
-    searchQuery = "energetic electronic";
-  } else if (keywords.includes("party") || keywords.includes("dance")) {
-    searchQuery = "dance party";
-  } else if (keywords.includes("focus") || keywords.includes("study")) {
-    searchQuery = "focus ambient instrumental";
-  } else if (keywords.includes("sleep") || keywords.includes("calm")) {
-    searchQuery = "sleep calm ambient";
-  } else if (keywords.includes("rock")) {
-    searchQuery = "rock guitar";
-  } else if (keywords.includes("pop")) {
-    searchQuery = "pop hits";
-  } else if (keywords.includes("hip") || keywords.includes("rap")) {
-    searchQuery = "hiphop beats";
-  } else if (keywords.includes("jazz")) {
-    searchQuery = "jazz smooth";
-  } else if (keywords.includes("classical")) {
-    searchQuery = "classical piano";
+// Search for songs (for adding to playlist)
+async function searchSongs(query: string): Promise<ParsedTrack[]> {
+  try {
+    const searchUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(query + " song")}&sp=EgIQAQ%253D%253D`;
+    
+    const response = await fetch(searchUrl, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'Accept-Language': 'en-US,en;q=0.9',
+      }
+    });
+
+    const html = await response.text();
+    const dataMatch = html.match(/var ytInitialData = ({.*?});<\/script>/s) || 
+                      html.match(/ytInitialData\s*=\s*({.*?});/s);
+    
+    if (!dataMatch) return [];
+
+    const data = JSON.parse(dataMatch[1]);
+    const tracks: ParsedTrack[] = [];
+    const contents = data?.contents?.twoColumnSearchResultsRenderer?.primaryContents?.sectionListRenderer?.contents;
+    
+    if (!contents) return [];
+
+    for (const section of contents) {
+      const items = section?.itemSectionRenderer?.contents || [];
+      
+      for (const item of items) {
+        const videoRenderer = item.videoRenderer;
+        if (!videoRenderer) continue;
+
+        const videoId = videoRenderer.videoId;
+        if (!videoId) continue;
+
+        const title = videoRenderer.title?.runs?.[0]?.text || "";
+        const channelName = videoRenderer.ownerText?.runs?.[0]?.text || "";
+        const thumbnail = `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`;
+        
+        const durationText = videoRenderer.lengthText?.simpleText || "";
+        let duration = 0;
+        if (durationText) {
+          const parts = durationText.split(':').map(Number);
+          if (parts.length === 2) {
+            duration = parts[0] * 60 + parts[1];
+          } else if (parts.length === 3) {
+            duration = parts[0] * 3600 + parts[1] * 60 + parts[2];
+          }
+        }
+
+        // Filter shorts
+        if (duration > 30 && duration < 600) {
+          tracks.push({
+            id: videoId,
+            title,
+            artist: channelName,
+            thumbnail,
+            duration,
+            videoId,
+          });
+        }
+      }
+    }
+
+    return tracks.slice(0, 15);
+  } catch (error) {
+    console.error("[ImportPlaylist] Search error:", error);
+    return [];
   }
-  
-  return await searchJamendo(searchQuery, count);
 }
 
 serve(async (req) => {
@@ -162,69 +419,71 @@ serve(async (req) => {
   }
 
   try {
-    const { url, searchQuery } = await req.json();
+    const body = await req.json();
+    const { url, searchQuery } = body;
 
-    // If searchQuery is provided, just search Jamendo
+    console.log(`[ImportPlaylist] Request received - url: ${url}, searchQuery: ${searchQuery}`);
+
+    // Handle search request
     if (searchQuery) {
-      const tracks = await searchJamendo(searchQuery, 20);
+      const tracks = await searchSongs(searchQuery);
       return new Response(
         JSON.stringify({ data: { tracks } }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
+    // Handle playlist import
     if (!url) {
       return new Response(
-        JSON.stringify({ error: "URL is required" }),
+        JSON.stringify({ error: "URL or searchQuery is required" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    let playlistInfo: { name: string; tracks: TrackInfo[] };
-    let isSpotify = false;
-    let isYouTube = false;
+    let playlistData: PlaylistData;
 
-    // Detect platform and parse
     if (url.includes("spotify.com")) {
-      isSpotify = true;
-      playlistInfo = await parseSpotifyPlaylist(url);
+      const playlistId = extractSpotifyPlaylistId(url);
+      if (!playlistId) {
+        return new Response(
+          JSON.stringify({ error: "Invalid Spotify playlist URL" }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+      
+      playlistData = await parseSpotifyPlaylist(playlistId);
     } else if (url.includes("youtube.com") || url.includes("youtu.be")) {
-      isYouTube = true;
-      playlistInfo = await parseYouTubePlaylist(url);
+      const playlistId = extractYouTubePlaylistId(url);
+      if (!playlistId) {
+        return new Response(
+          JSON.stringify({ error: "Invalid YouTube playlist URL" }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+      
+      playlistData = await parseYouTubePlaylist(playlistId);
     } else {
       return new Response(
-        JSON.stringify({ error: "Unsupported platform. Please use Spotify or YouTube playlist URLs." }),
+        JSON.stringify({ error: "Unsupported URL. Please use YouTube or Spotify playlist links." }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    let matchedTracks: ImportedTrack[];
-
-    if (playlistInfo.tracks.length > 0) {
-      // We have track info, find similar tracks
-      matchedTracks = await findSimilarTracks(playlistInfo.tracks);
-    } else {
-      // No track info, get curated tracks based on playlist name
-      matchedTracks = await getCuratedTracks(playlistInfo.name, 15);
-    }
+    console.log(`[ImportPlaylist] Returning ${playlistData.tracks.length} tracks for playlist: ${playlistData.name}`);
 
     return new Response(
-      JSON.stringify({
-        data: {
-          name: playlistInfo.name,
-          source: isSpotify ? "spotify" : "youtube",
-          tracks: matchedTracks,
-          note: playlistInfo.tracks.length === 0 
-            ? "We found similar tracks based on your playlist theme. For exact matches, search for specific songs." 
-            : undefined,
-        }
+      JSON.stringify({ 
+        data: playlistData,
+        success: playlistData.tracks.length > 0
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
+
   } catch (error) {
-    console.error("Import playlist error:", error);
+    console.error("[ImportPlaylist] Error:", error);
     return new Response(
-      JSON.stringify({ error: error instanceof Error ? error.message : "Failed to import playlist" }),
+      JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error" }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }

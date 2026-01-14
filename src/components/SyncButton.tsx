@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Badge } from '@/components/ui/badge';
 import { useMusicSyncContext } from '@/contexts/MusicSyncContext';
-import MusicSyncPanel from './MusicSyncPanel';
+import MusicSyncPanelAdvanced from './MusicSyncPanelAdvanced';
 import { cn } from '@/lib/utils';
 
 const SyncButton = () => {
@@ -53,7 +53,7 @@ const SyncButton = () => {
         </Tooltip>
       </TooltipProvider>
 
-      <MusicSyncPanel 
+      <MusicSyncPanelAdvanced 
         isOpen={isPanelOpen} 
         onClose={() => setIsPanelOpen(false)} 
       />
