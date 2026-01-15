@@ -37,32 +37,44 @@ export const useYTMusicAPI = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const callYTMusic = useCallback(async (action: string, params: Record<string, any> = {}) => {
+  const callYTMusic = useCallback(async (action: string, params: Record<string, any> = {}, retries = 2) => {
     setIsLoading(true);
     setError(null);
 
-    try {
-      const { data, error: fnError } = await supabase.functions.invoke('youtube-music', {
-        body: { action, ...params }
-      });
+    for (let attempt = 0; attempt <= retries; attempt++) {
+      try {
+        const { data, error: fnError } = await supabase.functions.invoke('youtube-music', {
+          body: { action, ...params }
+        });
 
-      if (fnError) {
-        throw new Error(fnError.message);
+        if (fnError) {
+          throw new Error(fnError.message);
+        }
+
+        if (data?.error) {
+          throw new Error(data.error);
+        }
+
+        setIsLoading(false);
+        return data?.data;
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Failed to fetch music';
+        
+        if (attempt === retries) {
+          setError(message);
+          console.error('[YTMusic]', message);
+          setIsLoading(false);
+          return null;
+        }
+        
+        // Wait before retry
+        console.log(`[YTMusic] Retry ${attempt + 1}/${retries} for ${action}`);
+        await new Promise(resolve => setTimeout(resolve, 1000 * (attempt + 1)));
       }
-
-      if (data?.error) {
-        throw new Error(data.error);
-      }
-
-      return data?.data;
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to fetch music';
-      setError(message);
-      console.error('[YTMusic]', message);
-      return null;
-    } finally {
-      setIsLoading(false);
     }
+    
+    setIsLoading(false);
+    return null;
   }, []);
 
   // Search for songs

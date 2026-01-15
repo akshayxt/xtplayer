@@ -30,7 +30,7 @@ const MainContent = () => {
         {isYTMusicMode ? (
           // YT Music Mode - YouTube Music, no API key required
           searchQuery ? (
-            <YTMusicSearchNew searchQuery={searchQuery} />
+            <YTMusicSearchNew searchQuery={searchQuery} onSearchChange={setSearchQuery} />
           ) : (
             <YTMusicHomeNew />
           )

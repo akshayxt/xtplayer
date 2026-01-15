@@ -1,7 +1,9 @@
 // Audio Player Context with intelligent Spotify-like autoplay system
 // Includes Media Session API for background playback on mobile
 // Supports both YouTube (via IFrame API) and direct audio streaming (for free music)
+// Enhanced with YouTube Music API + AI-powered suggestions
 import React, { createContext, useContext, useState, useRef, ReactNode, useEffect, useCallback } from 'react';
+import { supabase } from '@/integrations/supabase/client';
 
 export interface Video {
   id: string;
@@ -319,78 +321,137 @@ export const AudioPlayerProvider = ({ children }: { children: ReactNode }) => {
     localStorage.setItem(SKIP_DATA_KEY, JSON.stringify(Object.fromEntries(skipDataRef.current)));
   }, []);
 
-  // Build search queries for autoplay
-  const buildSearchQueries = useCallback((seed: Video): string[] => {
-    const analyzed = analyzeVideo(seed);
-    const queries: string[] = [];
-    
-    // Same artist (highest priority)
-    queries.push(`${seed.channelTitle} songs`);
-    
-    // Genre + mood mix
-    if (analyzed.genre) {
-      queries.push(`${analyzed.genre} ${analyzed.mood || ''} music 2024`);
+  // Fetch related songs using YouTube Music edge function
+  const fetchRelatedFromYTMusic = useCallback(async (videoId: string): Promise<Video[]> => {
+    try {
+      console.log(`[Autoplay] Fetching related songs for: ${videoId}`);
+      const { data, error } = await supabase.functions.invoke('youtube-music', {
+        body: { action: 'related', videoId, limit: 25 }
+      });
+
+      if (error) throw error;
+      
+      const songs = data?.data || [];
+      return songs.map((song: any) => ({
+        id: song.videoId,
+        title: song.title,
+        thumbnail: song.thumbnail,
+        channelTitle: song.artist,
+        duration: song.duration,
+      }));
+    } catch (err) {
+      console.error('[Autoplay] Error fetching related:', err);
+      return [];
     }
-    
-    // Title keyword extraction
-    const keywords = seed.title
-      .replace(/\(.*?\)|\[.*?\]/g, '')
-      .split(/\s+/)
-      .filter(w => w.length > 3 && !w.match(/official|video|audio|lyrics|hd|4k|mv/i))
-      .slice(0, 2);
-    if (keywords.length > 0) {
-      queries.push(`${keywords.join(' ')} similar songs`);
-    }
-    
-    // Discovery query
-    queries.push(`${analyzed.genre || 'popular'} music mix`);
-    
-    return queries;
   }, []);
 
-  // Fetch and build autoplay queue
-  const buildAutoplayQueue = useCallback(async (seed: Video) => {
-    const apiKey = apiKeyRef.current || localStorage.getItem('youtube_api_key');
-    if (!apiKey) {
-      console.log('[Autoplay] No API key available');
-      return;
+  // Get AI-enhanced suggestions for variety
+  const getAISuggestions = useCallback(async (seed: Video): Promise<string[]> => {
+    try {
+      const { data, error } = await supabase.functions.invoke('smart-suggestions', {
+        body: {
+          currentSong: { title: seed.title, artist: seed.channelTitle },
+          recentHistory: recentlyPlayed.slice(0, 10).map(v => v.channelTitle),
+        }
+      });
+
+      if (error) throw error;
+      return data?.suggestions || [];
+    } catch (err) {
+      console.error('[Autoplay] AI suggestions error:', err);
+      return [];
     }
-    
+  }, [recentlyPlayed]);
+
+  // Search songs from suggestions
+  const searchFromSuggestion = useCallback(async (query: string): Promise<Video[]> => {
+    try {
+      const { data, error } = await supabase.functions.invoke('youtube-music', {
+        body: { action: 'search', query, limit: 6 }
+      });
+
+      if (error) throw error;
+      const songs = data?.data?.songs || [];
+      return songs.map((song: any) => ({
+        id: song.videoId,
+        title: song.title,
+        thumbnail: song.thumbnail,
+        channelTitle: song.artist,
+        duration: song.duration,
+      }));
+    } catch (err) {
+      console.error('[Autoplay] Search error:', err);
+      return [];
+    }
+  }, []);
+
+  // Build autoplay queue using YouTube Music API + AI
+  const buildAutoplayQueue = useCallback(async (seed: Video) => {
     setIsQueueBuilding(true);
-    console.log(`[Autoplay] Building queue from: "${seed.title}"`);
+    console.log(`[Autoplay] Building smart queue from: "${seed.title}"`);
     
     const excludeIds = new Set([
       seed.id,
-      ...recentlyPlayed.slice(0, 10).map(v => v.id),
+      ...recentlyPlayed.slice(0, 20).map(v => v.id),
       ...autoplayQueue.map(v => v.id),
     ]);
     
-    const queries = buildSearchQueries(seed);
-    const allVideos: Video[] = [];
-    
-    for (const query of queries.slice(0, 3)) {
-      try {
-        const response = await fetch(
-          `https://www.googleapis.com/youtube/v3/search?part=snippet&maxResults=8&q=${encodeURIComponent(query)}&type=video&videoCategoryId=10&key=${apiKey}`
-        );
+    let allVideos: Video[] = [];
+
+    try {
+      // Step 1: Get related songs from YouTube Music (primary source)
+      const relatedVideos = await fetchRelatedFromYTMusic(seed.id);
+      const filteredRelated = relatedVideos.filter(v => !excludeIds.has(v.id));
+      allVideos.push(...filteredRelated);
+      filteredRelated.forEach(v => excludeIds.add(v.id));
+      
+      console.log(`[Autoplay] Got ${filteredRelated.length} related songs`);
+
+      // Step 2: Get AI suggestions for variety (runs in parallel)
+      const aiSuggestions = await getAISuggestions(seed);
+      
+      // Step 3: Search for AI suggestions (limited to 2 for performance)
+      if (aiSuggestions.length > 0) {
+        const searchPromises = aiSuggestions.slice(0, 2).map(query => searchFromSuggestion(query));
+        const searchResults = await Promise.all(searchPromises);
         
-        if (!response.ok) continue;
+        for (const songs of searchResults) {
+          const filtered = songs.filter(v => !excludeIds.has(v.id));
+          allVideos.push(...filtered);
+          filtered.forEach(v => excludeIds.add(v.id));
+        }
         
-        const data = await response.json();
-        const videos = (data.items || [])
-          .filter((item: any) => !excludeIds.has(item.id.videoId))
-          .map((item: any) => analyzeVideo({
-            id: item.id.videoId,
-            title: item.snippet.title,
-            thumbnail: item.snippet.thumbnails.medium?.url || item.snippet.thumbnails.default?.url,
-            channelTitle: item.snippet.channelTitle,
-            channelId: item.snippet.channelId,
-          }));
-        
-        allVideos.push(...videos);
-        videos.forEach((v: Video) => excludeIds.add(v.id));
-      } catch (error) {
-        console.error('[Autoplay] Fetch error:', error);
+        console.log(`[Autoplay] Added songs from ${aiSuggestions.length} AI suggestions`);
+      }
+    } catch (error) {
+      console.error('[Autoplay] Error building queue:', error);
+    }
+
+    // If we got no results from edge function, try legacy API method
+    if (allVideos.length === 0) {
+      const apiKey = apiKeyRef.current || localStorage.getItem('youtube_api_key');
+      if (apiKey) {
+        console.log('[Autoplay] Falling back to direct API');
+        try {
+          const response = await fetch(
+            `https://www.googleapis.com/youtube/v3/search?part=snippet&maxResults=20&q=${encodeURIComponent(seed.channelTitle + ' songs')}&type=video&videoCategoryId=10&key=${apiKey}`
+          );
+          
+          if (response.ok) {
+            const data = await response.json();
+            allVideos = (data.items || [])
+              .filter((item: any) => !excludeIds.has(item.id.videoId))
+              .map((item: any) => analyzeVideo({
+                id: item.id.videoId,
+                title: item.snippet.title,
+                thumbnail: item.snippet.thumbnails.medium?.url || item.snippet.thumbnails.default?.url,
+                channelTitle: item.snippet.channelTitle,
+                channelId: item.snippet.channelId,
+              }));
+          }
+        } catch (e) {
+          console.error('[Autoplay] Fallback API error:', e);
+        }
       }
     }
     
@@ -400,21 +461,22 @@ export const AudioPlayerProvider = ({ children }: { children: ReactNode }) => {
     
     let ranked = allVideos
       .map(video => {
+        const analyzed = analyzeVideo(video);
         let score = 50;
         
         // Same artist bonus
-        if (video.channelTitle.toLowerCase() === seed.channelTitle.toLowerCase()) {
+        if (video.channelTitle?.toLowerCase() === seed.channelTitle?.toLowerCase()) {
           score += 35;
         }
         
         // Same genre
-        if (video.genre === seedAnalyzed.genre) score += 15;
+        if (analyzed.genre === seedAnalyzed.genre) score += 15;
         
         // Same mood
-        if (video.mood === seedAnalyzed.mood) score += 10;
+        if (analyzed.mood === seedAnalyzed.mood) score += 10;
         
         // Same tempo
-        if (video.tempo === seedAnalyzed.tempo) score += 5;
+        if (analyzed.tempo === seedAnalyzed.tempo) score += 5;
         
         // Variety penalty
         if (recentChannels.has(video.channelId)) score -= 15;
@@ -426,7 +488,7 @@ export const AudioPlayerProvider = ({ children }: { children: ReactNode }) => {
         // Discovery bonus (10% chance of variety)
         score += Math.random() * 12;
         
-        return { video, score };
+        return { video: analyzed, score };
       })
       .sort((a, b) => b.score - a.score)
       .map(s => s.video)
@@ -439,8 +501,8 @@ export const AudioPlayerProvider = ({ children }: { children: ReactNode }) => {
     
     setAutoplayQueue(ranked);
     setIsQueueBuilding(false);
-    console.log(`[Autoplay] Queue built with ${ranked.length} songs${isShuffle ? ' (shuffled)' : ''}`);
-  }, [recentlyPlayed, autoplayQueue, buildSearchQueries, isShuffle]);
+    console.log(`[Autoplay] Smart queue built with ${ranked.length} songs${isShuffle ? ' (shuffled)' : ''}`);
+  }, [recentlyPlayed, autoplayQueue, fetchRelatedFromYTMusic, getAISuggestions, searchFromSuggestion, isShuffle]);
 
   // Load YouTube API
   useEffect(() => {
