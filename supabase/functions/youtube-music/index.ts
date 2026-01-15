@@ -170,44 +170,52 @@ async function getSuggestions(query: string): Promise<string[]> {
   }
 }
 
-// Search YouTube for music
+// Search YouTube for music - uses Invidious API as primary (more reliable)
 async function searchYouTube(query: string, limit: number = 20): Promise<Song[]> {
+  // Try Invidious first (more reliable in edge functions)
+  const invidiousResults = await searchYouTubeFallback(query, limit);
+  if (invidiousResults.length > 0) {
+    return invidiousResults;
+  }
+
+  // Fallback to direct YouTube scraping (may hit redirect limits)
   try {
-    // Add music filter to query
     const musicQuery = query.includes("song") || query.includes("music") 
       ? query 
       : `${query} song`;
 
-    // Use YouTube's public search page data
     const searchUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(musicQuery)}&sp=EgIQAQ%253D%253D`;
     
     const response = await fetch(searchUrl, {
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         'Accept-Language': 'en-US,en;q=0.9',
-      }
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+      },
+      redirect: 'follow',
     });
+
+    if (!response.ok) {
+      console.log(`YouTube direct search failed: ${response.status}`);
+      return [];
+    }
 
     const html = await response.text();
     
-    // Extract ytInitialData
     const dataMatch = html.match(/var ytInitialData = ({.*?});<\/script>/s) || 
                       html.match(/ytInitialData\s*=\s*({.*?});/s);
     
     if (!dataMatch) {
-      console.log("Could not find ytInitialData, using fallback");
-      return await searchYouTubeFallback(query, limit);
+      console.log("Could not find ytInitialData");
+      return [];
     }
 
     const data = JSON.parse(dataMatch[1]);
     const videos: Song[] = [];
 
-    // Navigate to search results
     const contents = data?.contents?.twoColumnSearchResultsRenderer?.primaryContents?.sectionListRenderer?.contents;
     
-    if (!contents) {
-      return await searchYouTubeFallback(query, limit);
-    }
+    if (!contents) return [];
 
     for (const section of contents) {
       const items = section?.itemSectionRenderer?.contents || [];
@@ -228,16 +236,14 @@ async function searchYouTube(query: string, limit: number = 20): Promise<Song[]>
           badge.metadataBadgeRenderer?.style === "BADGE_STYLE_TYPE_VERIFIED_ARTIST"
         );
 
-        // Filter non-music content
         if (isNotMusic(title)) continue;
 
-        // Skip shorts and very long videos (likely podcasts/compilations)
         const durationParts = duration.split(":").map(Number);
         const totalSeconds = durationParts.length === 3 
           ? durationParts[0] * 3600 + durationParts[1] * 60 + durationParts[2]
           : durationParts[0] * 60 + (durationParts[1] || 0);
         
-        if (totalSeconds < 60 || totalSeconds > 900) continue; // 1-15 min
+        if (totalSeconds < 60 || totalSeconds > 900) continue;
 
         const isOfficial = isMusicContent(title, channelName);
         const score = calculateScore(title, channelName, viewCountText, verified);
@@ -256,7 +262,6 @@ async function searchYouTube(query: string, limit: number = 20): Promise<Song[]>
       }
     }
 
-    // Deduplicate by title similarity
     const seen = new Map<string, Song>();
     for (const video of videos) {
       const key = video.title.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 30);
@@ -265,14 +270,13 @@ async function searchYouTube(query: string, limit: number = 20): Promise<Song[]>
       }
     }
 
-    // Sort by score and limit
     return Array.from(seen.values())
       .sort((a, b) => b.score - a.score)
       .slice(0, limit);
 
   } catch (error) {
-    console.error("YouTube search error:", error);
-    return await searchYouTubeFallback(query, limit);
+    console.error("YouTube direct search error:", error);
+    return [];
   }
 }
 

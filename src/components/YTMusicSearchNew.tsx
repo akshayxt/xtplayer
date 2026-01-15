@@ -7,16 +7,43 @@ import { cn } from '@/lib/utils';
 
 interface YTMusicSearchNewProps {
   searchQuery: string;
+  onSearchChange?: (query: string) => void;
 }
 
-const YTMusicSearchNew = ({ searchQuery }: YTMusicSearchNewProps) => {
+const YTMusicSearchNew = ({ searchQuery, onSearchChange }: YTMusicSearchNewProps) => {
   const [results, setResults] = useState<YTSong[]>([]);
   const [suggestions, setSuggestions] = useState<string[]>([]);
+  const [liveSuggestions, setLiveSuggestions] = useState<string[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [selectedArtist, setSelectedArtist] = useState<{ name: string; channelId?: string } | null>(null);
   const { search, getSuggestions, toVideoFormat } = useYTMusicAPI();
   const { play, currentVideo, isPlaying, setPlaylist } = useAudioPlayer();
   const searchTimeoutRef = useRef<NodeJS.Timeout>();
+  const suggestTimeoutRef = useRef<NodeJS.Timeout>();
+
+  // Fetch live suggestions as user types
+  const fetchLiveSuggestions = useCallback(async (query: string) => {
+    if (!query.trim() || query.length < 2) {
+      setLiveSuggestions([]);
+      return;
+    }
+    
+    const suggestions = await getSuggestions(query);
+    setLiveSuggestions(suggestions);
+  }, [getSuggestions]);
+
+  // Debounced live suggestions
+  useEffect(() => {
+    if (suggestTimeoutRef.current) {
+      clearTimeout(suggestTimeoutRef.current);
+    }
+    suggestTimeoutRef.current = setTimeout(() => fetchLiveSuggestions(searchQuery), 150);
+    return () => {
+      if (suggestTimeoutRef.current) {
+        clearTimeout(suggestTimeoutRef.current);
+      }
+    };
+  }, [searchQuery, fetchLiveSuggestions]);
 
   const performSearch = useCallback(async () => {
     if (!searchQuery.trim()) {
@@ -26,6 +53,7 @@ const YTMusicSearchNew = ({ searchQuery }: YTMusicSearchNewProps) => {
     }
 
     setIsSearching(true);
+    setLiveSuggestions([]); // Clear live suggestions when searching
     const data = await search(searchQuery, 25);
     if (data) {
       setResults(data.songs);
@@ -43,7 +71,7 @@ const YTMusicSearchNew = ({ searchQuery }: YTMusicSearchNewProps) => {
     if (searchTimeoutRef.current) {
       clearTimeout(searchTimeoutRef.current);
     }
-    searchTimeoutRef.current = setTimeout(performSearch, 400);
+    searchTimeoutRef.current = setTimeout(performSearch, 500);
     return () => {
       if (searchTimeoutRef.current) {
         clearTimeout(searchTimeoutRef.current);
@@ -57,6 +85,12 @@ const YTMusicSearchNew = ({ searchQuery }: YTMusicSearchNewProps) => {
     const queue = results.slice(index).map(toVideoFormat);
     setPlaylist(queue);
     play(video);
+  };
+
+  const handleSuggestionClick = (suggestion: string) => {
+    if (onSearchChange) {
+      onSearchChange(suggestion);
+    }
   };
 
   if (!searchQuery) {
@@ -104,16 +138,33 @@ const YTMusicSearchNew = ({ searchQuery }: YTMusicSearchNewProps) => {
         <span className="text-sm text-muted-foreground">{results.length} songs</span>
       </div>
 
-      {/* Suggestions */}
+      {/* Live Suggestions (while typing) */}
+      {liveSuggestions.length > 0 && !isSearching && (
+        <div className="bg-card/80 backdrop-blur-sm rounded-xl p-3 border border-border/50">
+          <p className="text-xs text-muted-foreground mb-2">Did you mean:</p>
+          <div className="flex flex-wrap gap-2">
+            {liveSuggestions.map((suggestion, i) => (
+              <button
+                key={i}
+                className="px-3 py-1.5 text-sm bg-primary/10 hover:bg-primary/20 rounded-full text-foreground transition-colors border border-primary/20"
+                onClick={() => handleSuggestionClick(suggestion)}
+              >
+                {suggestion}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Related Suggestions */}
       {suggestions.length > 0 && (
         <div className="flex flex-wrap gap-2">
+          <span className="text-xs text-muted-foreground py-1.5">Related:</span>
           {suggestions.slice(0, 5).map((suggestion, i) => (
             <button
               key={i}
               className="px-3 py-1.5 text-sm bg-secondary/80 hover:bg-secondary rounded-full text-foreground transition-colors"
-              onClick={() => {
-                // This would trigger a new search - for now just show it
-              }}
+              onClick={() => handleSuggestionClick(suggestion)}
             >
               {suggestion}
             </button>
