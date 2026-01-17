@@ -3,14 +3,16 @@ import {
   Play, Pause, X, ChevronUp, ChevronDown, 
   SkipBack, SkipForward, Repeat, Repeat1, 
   ListMusic, Sparkles, Loader2, Shuffle,
-  Volume2, Volume1, VolumeX
+  Volume2, Volume1, VolumeX, AudioLines
 } from 'lucide-react';
 import { useAudioPlayer } from '@/contexts/AudioPlayerContext';
+import { useAudioVisualizer } from '@/hooks/useAudioVisualizer';
 import { Slider } from '@/components/ui/slider';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import AutoplayQueue from './AutoplayQueue';
 import SyncButton from './SyncButton';
+import VisualizerBars from './VisualizerBars';
 import { cn } from '@/lib/utils';
 
 const MiniPlayer = () => {
@@ -39,10 +41,15 @@ const MiniPlayer = () => {
     autoplayQueue,
     isQueueBuilding,
     skipCurrent,
+    audioElement,
   } = useAudioPlayer();
 
   const [isQueueOpen, setIsQueueOpen] = useState(false);
   const [showVolumeSlider, setShowVolumeSlider] = useState(false);
+  const [showVisualizer, setShowVisualizer] = useState(true);
+
+  // Get visualizer data from audio element
+  const visualizerData = useAudioVisualizer(audioElement, isPlaying);
 
   const cycleRepeatMode = () => {
     if (repeatMode === 'off') setRepeatMode('one');
@@ -144,9 +151,21 @@ const MiniPlayer = () => {
                   </div>
                 )}
               </div>
-              <div className="min-w-0">
+              <div className="min-w-0 flex-1">
                 <h4 className="font-medium text-foreground truncate">{currentVideo.title}</h4>
                 <p className="text-sm text-muted-foreground truncate">{currentVideo.channelTitle}</p>
+                
+                {/* Visualizer under song info - only show when enabled and playing */}
+                {showVisualizer && (
+                  <div className="mt-1 hidden sm:block">
+                    <VisualizerBars
+                      frequencyData={visualizerData.frequencyData}
+                      isPlaying={isPlaying}
+                      barCount={20}
+                      variant="mini"
+                    />
+                  </div>
+                )}
               </div>
             </div>
 
@@ -256,6 +275,25 @@ const MiniPlayer = () => {
 
             {/* Actions */}
             <div className="flex items-center gap-1">
+              {/* Visualizer Toggle */}
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => setShowVisualizer(!showVisualizer)}
+                      className={showVisualizer ? 'text-primary' : ''}
+                    >
+                      <AudioLines className="w-5 h-5" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    {showVisualizer ? 'Hide Visualizer' : 'Show Visualizer'}
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+
               <SyncButton />
 
               <TooltipProvider>

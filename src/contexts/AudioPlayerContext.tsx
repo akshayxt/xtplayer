@@ -64,6 +64,7 @@ interface AudioPlayerContextType {
   autoplayQueue: Video[];
   savedPlaylists: SavedPlaylist[];
   isQueueBuilding: boolean;
+  audioElement: HTMLAudioElement | null;
   play: (video: Video) => void;
   pause: () => void;
   resume: () => void;
@@ -1039,6 +1040,7 @@ export const AudioPlayerProvider = ({ children }: { children: ReactNode }) => {
         autoplayQueue,
         savedPlaylists,
         isQueueBuilding,
+        audioElement: audioRef.current,
         play,
         pause,
         resume,
