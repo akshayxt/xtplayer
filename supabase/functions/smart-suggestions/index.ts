@@ -1,4 +1,10 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { 
+  checkRateLimit, 
+  getClientIdentifier, 
+  createRateLimitResponse,
+  getRateLimitHeaders 
+} from "../_shared/rate-limit.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -11,6 +17,14 @@ serve(async (req) => {
   }
 
   try {
+    // Rate limiting: 20 requests per minute per client (AI-intensive)
+    const clientId = getClientIdentifier(req);
+    const rateLimitResult = checkRateLimit(clientId, { maxRequests: 20, windowMs: 60000 });
+    
+    if (!rateLimitResult.allowed) {
+      return createRateLimitResponse(rateLimitResult, corsHeaders);
+    }
+
     const { currentSong, recentHistory } = await req.json();
     
     if (!currentSong?.title) {
@@ -112,7 +126,13 @@ Generate 5 YouTube Music search queries for the next songs. Return only the quer
 
     return new Response(
       JSON.stringify({ suggestions }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      { 
+        headers: { 
+          ...corsHeaders, 
+          ...getRateLimitHeaders(rateLimitResult),
+          "Content-Type": "application/json" 
+        } 
+      }
     );
   } catch (error) {
     console.error("[SmartSuggestions] Error:", error);

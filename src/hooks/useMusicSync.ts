@@ -352,9 +352,44 @@ export const useMusicSync = (): UseMusicSyncReturn => {
     }
   }, [user, profile, measureLatency, getServerTime, subscribeToSession, startHeartbeat]);
 
+  // Validate sync key format (XT-XXXXXX where X is alphanumeric)
+  const validateSyncKey = useCallback((key: string): boolean => {
+    // Expected format: XT-XXXXXX (6 alphanumeric characters after XT-)
+    const syncKeyRegex = /^XT-[A-Z0-9]{6}$/i;
+    return syncKeyRegex.test(key.trim());
+  }, []);
+
+  // Validate and sanitize display name
+  const sanitizeDisplayName = useCallback((name: string | undefined): string => {
+    if (!name) return `Guest ${Math.floor(Math.random() * 1000)}`;
+    
+    // Trim and limit length
+    let sanitized = name.trim().substring(0, 50);
+    
+    // Remove potentially dangerous characters (HTML/script injection prevention)
+    sanitized = sanitized.replace(/[<>"'&\\]/g, '');
+    
+    // Ensure we have a valid name after sanitization
+    if (sanitized.length === 0) {
+      return `Guest ${Math.floor(Math.random() * 1000)}`;
+    }
+    
+    return sanitized;
+  }, []);
+
   // Join an existing session
   const joinSession = useCallback(async (syncKey: string, displayName?: string): Promise<boolean> => {
     try {
+      // Validate sync key format before making database query
+      const normalizedSyncKey = syncKey.trim().toUpperCase();
+      if (!validateSyncKey(normalizedSyncKey)) {
+        console.error('[MusicSync] Invalid sync key format:', syncKey);
+        return false;
+      }
+
+      // Sanitize display name
+      const sanitizedDisplayName = sanitizeDisplayName(displayName || profile?.display_name);
+
       setIsSyncing(true);
       await measureLatency();
 
@@ -362,7 +397,7 @@ export const useMusicSync = (): UseMusicSyncReturn => {
       const { data: sessionData, error: sessionError } = await supabase
         .from('sync_sessions')
         .select('*')
-        .eq('sync_key', syncKey.toUpperCase())
+        .eq('sync_key', normalizedSyncKey)
         .eq('status', 'active')
         .single();
 
@@ -379,7 +414,7 @@ export const useMusicSync = (): UseMusicSyncReturn => {
           session_id: sessionData.id,
           user_id: user?.id || null,
           device_id: deviceId.current,
-          display_name: displayName || profile?.display_name || `Guest ${Math.floor(Math.random() * 1000)}`,
+          display_name: sanitizedDisplayName,
           is_host: false,
           latency_ms: latencyRef.current,
           status: 'syncing',
@@ -441,7 +476,7 @@ export const useMusicSync = (): UseMusicSyncReturn => {
       setIsSyncing(false);
       return false;
     }
-  }, [user, profile, measureLatency, subscribeToSession, startHeartbeat]);
+  }, [user, profile, measureLatency, subscribeToSession, startHeartbeat, validateSyncKey, sanitizeDisplayName]);
 
   // Leave session (for participants)
   const leaveSession = useCallback(async () => {

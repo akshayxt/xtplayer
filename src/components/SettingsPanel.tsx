@@ -133,6 +133,12 @@ const SettingsPanel = ({ onClose }: SettingsPanelProps) => {
             </div>
 
             <div className="p-4 rounded-xl bg-secondary/50 space-y-4 border border-border/50">
+              <div className="flex items-start gap-2 text-sm text-warning bg-warning/10 p-3 rounded-lg border border-warning/20">
+                <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
+                <p>
+                  <strong>Security Notice:</strong> API keys stored in your browser are visible in DevTools and could be exposed if this site has vulnerabilities. For better security, consider using YT Music mode instead.
+                </p>
+              </div>
               <div className="flex items-start gap-2 text-sm text-muted-foreground">
                 <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
                 <p>
@@ -190,7 +196,7 @@ const SettingsPanel = ({ onClose }: SettingsPanelProps) => {
               </div>
 
               {isApiKeySet && (
-                <div className="flex items-center gap-2 text-sm text-green-500 animate-fade-in">
+                <div className="flex items-center gap-2 text-sm text-primary animate-fade-in">
                   <Check className="w-4 h-4" />
                   <span>API key is configured</span>
                 </div>
