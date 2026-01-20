@@ -1,4 +1,10 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { 
+  checkRateLimit, 
+  getClientIdentifier, 
+  createRateLimitResponse,
+  getRateLimitHeaders 
+} from "../_shared/rate-limit.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -576,6 +582,14 @@ serve(async (req) => {
   }
 
   try {
+    // Rate limiting: 30 requests per minute per client
+    const clientId = getClientIdentifier(req);
+    const rateLimitResult = checkRateLimit(clientId, { maxRequests: 30, windowMs: 60000 });
+    
+    if (!rateLimitResult.allowed) {
+      return createRateLimitResponse(rateLimitResult, corsHeaders);
+    }
+
     const { action, query, videoId, channelId, limit } = await req.json();
 
     let result: any;
@@ -640,7 +654,13 @@ serve(async (req) => {
 
     return new Response(
       JSON.stringify({ data: result }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      { 
+        headers: { 
+          ...corsHeaders, 
+          ...getRateLimitHeaders(rateLimitResult),
+          "Content-Type": "application/json" 
+        } 
+      }
     );
   } catch (error) {
     console.error("YouTube Music API error:", error);

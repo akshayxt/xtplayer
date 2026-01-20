@@ -1,4 +1,10 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { 
+  checkRateLimit, 
+  getClientIdentifier, 
+  createRateLimitResponse,
+  getRateLimitHeaders 
+} from "../_shared/rate-limit.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -419,6 +425,14 @@ serve(async (req) => {
   }
 
   try {
+    // Rate limiting: 10 requests per minute per client (resource-intensive)
+    const clientId = getClientIdentifier(req);
+    const rateLimitResult = checkRateLimit(clientId, { maxRequests: 10, windowMs: 60000 });
+    
+    if (!rateLimitResult.allowed) {
+      return createRateLimitResponse(rateLimitResult, corsHeaders);
+    }
+
     const body = await req.json();
     const { url, searchQuery } = body;
 
@@ -477,7 +491,13 @@ serve(async (req) => {
         data: playlistData,
         success: playlistData.tracks.length > 0
       }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      { 
+        headers: { 
+          ...corsHeaders, 
+          ...getRateLimitHeaders(rateLimitResult),
+          "Content-Type": "application/json" 
+        } 
+      }
     );
 
   } catch (error) {
