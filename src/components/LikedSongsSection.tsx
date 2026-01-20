@@ -3,6 +3,7 @@ import { useLibrarySync } from '@/hooks/useLibrarySync';
 import { useAudioPlayer, Video } from '@/contexts/AudioPlayerContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { Skeleton } from './ui/skeleton';
+import SongContextMenu from './SongContextMenu';
 
 const LikedSongsSection = () => {
   const { user } = useAuth();
@@ -46,6 +47,18 @@ const LikedSongsSection = () => {
           >
             <div className="relative aspect-video">
               <img src={video.thumbnail} alt={video.title} className="w-full h-full object-cover" />
+              {/* Three dot menu */}
+              <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity z-10">
+                <SongContextMenu
+                  song={{
+                    id: video.id,
+                    title: video.title,
+                    thumbnail: video.thumbnail,
+                    channelTitle: video.channelTitle,
+                    duration: video.duration,
+                  }}
+                />
+              </div>
             </div>
             <div className="p-3">
               <h3 className="font-medium text-sm text-foreground line-clamp-2">{video.title}</h3>
