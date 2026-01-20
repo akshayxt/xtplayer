@@ -5,6 +5,7 @@ import { useAudioPlayer } from '@/contexts/AudioPlayerContext';
 import { Skeleton } from '@/components/ui/skeleton';
 import UserPlaylistsSection from './UserPlaylistsSection';
 import ArtistProfileModal from './ArtistProfileModal';
+import SongContextMenu from './SongContextMenu';
 import { cn } from '@/lib/utils';
 
 const YTMusicHomeNew = () => {
@@ -155,6 +156,18 @@ const YTMusicHomeNew = () => {
                       <Play className="w-6 h-6 text-primary-foreground ml-1" />
                     </div>
                   </div>
+                  {/* Three dot menu */}
+                  <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity z-10">
+                    <SongContextMenu
+                      song={{
+                        id: song.videoId,
+                        title: song.title,
+                        thumbnail: song.thumbnail,
+                        artist: song.artist,
+                        duration: song.duration,
+                      }}
+                    />
+                  </div>
                   {isCurrentlyPlaying && (
                     <div className="absolute bottom-2 right-2 flex items-center gap-1 bg-primary/90 px-2 py-1 rounded-full">
                       <div className="flex items-center gap-0.5">
@@ -172,7 +185,7 @@ const YTMusicHomeNew = () => {
                     </div>
                   )}
                   {song.isVerified && (
-                    <div className="absolute top-2 right-2">
+                    <div className="absolute top-10 right-2">
                       <CheckCircle className="w-4 h-4 text-white drop-shadow-lg" />
                     </div>
                   )}
@@ -244,6 +257,18 @@ const YTMusicHomeNew = () => {
                         <div className="w-14 h-14 rounded-full bg-primary flex items-center justify-center shadow-lg transform scale-90 group-hover:scale-100 transition-transform">
                           <Play className="w-7 h-7 text-primary-foreground ml-1" />
                         </div>
+                      </div>
+                      {/* Three dot menu */}
+                      <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity z-10">
+                        <SongContextMenu
+                          song={{
+                            id: song.videoId,
+                            title: song.title,
+                            thumbnail: song.thumbnail,
+                            artist: song.artist,
+                            duration: song.duration,
+                          }}
+                        />
                       </div>
                       {isCurrentlyPlaying && (
                         <div className="absolute bottom-2 right-2 flex items-center gap-1 bg-primary/90 px-2 py-1 rounded-full">

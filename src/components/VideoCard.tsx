@@ -1,5 +1,6 @@
 import { Play, Clock } from 'lucide-react';
 import { useAudioPlayer } from '@/contexts/AudioPlayerContext';
+import SongContextMenu from './SongContextMenu';
 
 interface Video {
   id: string;
@@ -72,6 +73,19 @@ const VideoCard = ({ video }: VideoCardProps) => {
           <div className="w-16 h-16 rounded-full bg-primary/90 flex items-center justify-center glow-effect">
             <Play className="w-7 h-7 text-primary-foreground fill-current ml-1" />
           </div>
+        </div>
+
+        {/* Three dot menu */}
+        <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity z-10">
+          <SongContextMenu
+            song={{
+              id: video.id,
+              title: video.title,
+              thumbnail: video.thumbnail,
+              channelTitle: video.channelTitle,
+              duration: video.duration,
+            }}
+          />
         </div>
 
         {/* Duration badge */}

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Play, TrendingUp } from 'lucide-react';
 import { useAudioPlayer, type Video } from '@/contexts/AudioPlayerContext';
 import { useApiKey } from '@/contexts/ApiKeyContext';
+import SongContextMenu from './SongContextMenu';
 
 const TrendingGrid = () => {
   const [trendingVideos, setTrendingVideos] = useState<Video[]>([]);
@@ -100,6 +101,18 @@ const TrendingGrid = () => {
                   <div className="w-12 h-12 rounded-full bg-primary flex items-center justify-center shadow-lg transform scale-90 group-hover:scale-100 transition-transform">
                     <Play className="w-6 h-6 text-primary-foreground ml-1" />
                   </div>
+                </div>
+                {/* Three dot menu */}
+                <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity z-10">
+                  <SongContextMenu
+                    song={{
+                      id: video.id,
+                      title: video.title,
+                      thumbnail: video.thumbnail,
+                      channelTitle: video.channelTitle,
+                      duration: video.duration,
+                    }}
+                  />
                 </div>
                 {isCurrentlyPlaying && (
                   <div className="absolute bottom-2 right-2 flex items-center gap-1 bg-primary/90 px-2 py-1 rounded-full">
