@@ -79,6 +79,7 @@ interface AudioPlayerContextType {
   playNext: () => void;
   playPrevious: () => void;
   addToPlaylist: (video: Video) => void;
+  addNextInQueue: (video: Video) => void;
   setPlaylist: (videos: Video[]) => void;
   skipCurrent: () => void;
   removeFromQueue: (videoId: string) => void;
@@ -975,6 +976,21 @@ export const AudioPlayerProvider = ({ children }: { children: ReactNode }) => {
     });
   }, []);
 
+  // Add song to play next (right after current song)
+  const addNextInQueue = useCallback((video: Video) => {
+    setPlaylistState(prev => {
+      // Remove if already exists
+      const filtered = prev.filter(v => v.id !== video.id);
+      // Insert after current index (or at start if nothing playing)
+      const insertIndex = currentIndex >= 0 ? currentIndex + 1 : 0;
+      return [
+        ...filtered.slice(0, insertIndex),
+        analyzeVideo(video),
+        ...filtered.slice(insertIndex)
+      ];
+    });
+  }, [currentIndex]);
+
   const setPlaylist = useCallback((videos: Video[]) => {
     setPlaylistState(videos.map(analyzeVideo));
     setCurrentIndex(-1);
@@ -1055,6 +1071,7 @@ export const AudioPlayerProvider = ({ children }: { children: ReactNode }) => {
         playNext,
         playPrevious,
         addToPlaylist,
+        addNextInQueue,
         setPlaylist,
         skipCurrent,
         removeFromQueue,
