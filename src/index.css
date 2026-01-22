@@ -156,6 +156,7 @@
 
   html {
     scroll-behavior: smooth;
+    font-size: var(--base-font-size, 16px);
   }
 
   body {
@@ -165,7 +166,18 @@
     -moz-osx-font-smoothing: grayscale;
   }
 
-  /* Reduced motion support */
+  /* Dynamic spacing based on spacing scale */
+  .container {
+    padding-left: calc(1rem * var(--spacing-scale, 1));
+    padding-right: calc(1rem * var(--spacing-scale, 1));
+  }
+
+  /* Dynamic border radius */
+  .rounded-dynamic {
+    border-radius: var(--base-radius, 8px);
+  }
+
+  /* Reduced motion support - user preference */
   @media (prefers-reduced-motion: reduce) {
     *,
     *::before,
@@ -175,6 +187,29 @@
       transition-duration: 0.01ms !important;
       scroll-behavior: auto !important;
     }
+  }
+
+  /* Reduced motion class - user toggle */
+  .reduced-motion *,
+  .reduced-motion *::before,
+  .reduced-motion *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+
+  /* High contrast mode */
+  .high-contrast {
+    --foreground: 0 0% 100%;
+    --muted-foreground: 0 0% 80%;
+    --border: 0 0% 40%;
+    --shadow-intensity: 1.5;
+  }
+
+  .high-contrast.theme-light {
+    --foreground: 0 0% 0%;
+    --muted-foreground: 0 0% 30%;
+    --border: 0 0% 20%;
   }
 }
 
