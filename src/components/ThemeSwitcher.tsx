@@ -1,9 +1,10 @@
-import { Moon, Sun, Sparkles, Zap, RotateCcw } from 'lucide-react';
-import { useTheme, ThemePreset } from '@/contexts/ThemeContext';
+import { Moon, Sun, Sparkles, Zap, RotateCcw, Type, Maximize2, Circle, Eye, Activity } from 'lucide-react';
+import { useTheme, ThemePreset, FontSize, SpacingMode, BorderRadiusSize } from '@/contexts/ThemeContext';
 import { AnimatedButton } from '@/components/ui/animated-button';
 import { Slider } from '@/components/ui/slider';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
+import { Switch } from '@/components/ui/switch';
 import { cn } from '@/lib/utils';
 
 const themes: { id: ThemePreset; name: string; icon: React.ReactNode; colors: string[] }[] = [
@@ -24,6 +25,26 @@ const huePresets = [
   { name: 'Pink', hue: 330 },
 ];
 
+const fontSizes: { id: FontSize; name: string }[] = [
+  { id: 'small', name: 'Small' },
+  { id: 'medium', name: 'Medium' },
+  { id: 'large', name: 'Large' },
+];
+
+const spacingModes: { id: SpacingMode; name: string }[] = [
+  { id: 'compact', name: 'Compact' },
+  { id: 'comfortable', name: 'Comfortable' },
+  { id: 'spacious', name: 'Spacious' },
+];
+
+const borderRadii: { id: BorderRadiusSize; name: string; preview: string }[] = [
+  { id: 'none', name: 'None', preview: 'rounded-none' },
+  { id: 'small', name: 'Small', preview: 'rounded-sm' },
+  { id: 'medium', name: 'Medium', preview: 'rounded-md' },
+  { id: 'large', name: 'Large', preview: 'rounded-xl' },
+  { id: 'full', name: 'Full', preview: 'rounded-full' },
+];
+
 const ThemeSwitcher = () => {
   const {
     theme,
@@ -32,6 +53,11 @@ const ThemeSwitcher = () => {
     setShadowIntensity,
     setBlurIntensity,
     setPrimaryHue,
+    setFontSize,
+    setSpacingMode,
+    setBorderRadius,
+    setReducedMotion,
+    setHighContrast,
     resetToDefaults,
   } = useTheme();
 
@@ -99,10 +125,91 @@ const ThemeSwitcher = () => {
 
       <Separator />
 
+      {/* Font Size */}
+      <div className="space-y-3">
+        <div className="flex items-center gap-2">
+          <Type className="w-4 h-4 text-muted-foreground" />
+          <Label className="text-foreground font-medium">Font Size</Label>
+        </div>
+        <div className="flex gap-2">
+          {fontSizes.map((size) => (
+            <button
+              key={size.id}
+              onClick={() => setFontSize(size.id)}
+              className={cn(
+                "flex-1 py-2 px-3 rounded-lg border-2 text-sm font-medium transition-all duration-200",
+                "hover:scale-[1.02] active:scale-[0.98]",
+                theme.fontSize === size.id
+                  ? "border-primary bg-primary/10 text-primary"
+                  : "border-border hover:border-muted-foreground/50"
+              )}
+            >
+              {size.name}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Spacing Mode */}
+      <div className="space-y-3">
+        <div className="flex items-center gap-2">
+          <Maximize2 className="w-4 h-4 text-muted-foreground" />
+          <Label className="text-foreground font-medium">Spacing</Label>
+        </div>
+        <div className="flex gap-2">
+          {spacingModes.map((mode) => (
+            <button
+              key={mode.id}
+              onClick={() => setSpacingMode(mode.id)}
+              className={cn(
+                "flex-1 py-2 px-3 rounded-lg border-2 text-sm font-medium transition-all duration-200",
+                "hover:scale-[1.02] active:scale-[0.98]",
+                theme.spacingMode === mode.id
+                  ? "border-primary bg-primary/10 text-primary"
+                  : "border-border hover:border-muted-foreground/50"
+              )}
+            >
+              {mode.name}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Border Radius */}
+      <div className="space-y-3">
+        <div className="flex items-center gap-2">
+          <Circle className="w-4 h-4 text-muted-foreground" />
+          <Label className="text-foreground font-medium">Corner Radius</Label>
+        </div>
+        <div className="flex gap-2">
+          {borderRadii.map((radius) => (
+            <button
+              key={radius.id}
+              onClick={() => setBorderRadius(radius.id)}
+              className={cn(
+                "flex-1 py-2 px-2 border-2 text-xs font-medium transition-all duration-200",
+                "hover:scale-[1.02] active:scale-[0.98]",
+                radius.preview,
+                theme.borderRadius === radius.id
+                  ? "border-primary bg-primary/10 text-primary"
+                  : "border-border hover:border-muted-foreground/50"
+              )}
+            >
+              {radius.name}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <Separator />
+
       {/* Animation Speed */}
       <div className="space-y-3">
         <div className="flex justify-between items-center">
-          <Label className="text-foreground font-medium">Animation Speed</Label>
+          <div className="flex items-center gap-2">
+            <Activity className="w-4 h-4 text-muted-foreground" />
+            <Label className="text-foreground font-medium">Animation Speed</Label>
+          </div>
           <span className="text-xs text-muted-foreground">{theme.animationSpeed.toFixed(1)}x</span>
         </div>
         <Slider
@@ -112,6 +219,7 @@ const ThemeSwitcher = () => {
           max={2}
           step={0.1}
           className="w-full"
+          disabled={theme.reducedMotion}
         />
         <div className="flex justify-between text-xs text-muted-foreground">
           <span>Slower</span>
@@ -149,6 +257,35 @@ const ThemeSwitcher = () => {
           step={0.1}
           className="w-full"
         />
+      </div>
+
+      <Separator />
+
+      {/* Accessibility Options */}
+      <div className="space-y-4">
+        <Label className="text-foreground font-medium">Accessibility</Label>
+        
+        <div className="flex items-center justify-between">
+          <div className="space-y-0.5">
+            <Label className="text-sm">Reduced Motion</Label>
+            <p className="text-xs text-muted-foreground">Minimize animations</p>
+          </div>
+          <Switch
+            checked={theme.reducedMotion}
+            onCheckedChange={setReducedMotion}
+          />
+        </div>
+
+        <div className="flex items-center justify-between">
+          <div className="space-y-0.5">
+            <Label className="text-sm">High Contrast</Label>
+            <p className="text-xs text-muted-foreground">Increase color contrast</p>
+          </div>
+          <Switch
+            checked={theme.highContrast}
+            onCheckedChange={setHighContrast}
+          />
+        </div>
       </div>
 
       <Separator />

@@ -1,6 +1,9 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 
 export type ThemePreset = 'dark' | 'light' | 'glass' | 'neon';
+export type FontSize = 'small' | 'medium' | 'large';
+export type SpacingMode = 'compact' | 'comfortable' | 'spacious';
+export type BorderRadiusSize = 'none' | 'small' | 'medium' | 'large' | 'full';
 
 interface ThemeSettings {
   preset: ThemePreset;
@@ -8,6 +11,11 @@ interface ThemeSettings {
   shadowIntensity: number;
   blurIntensity: number;
   primaryHue: number;
+  fontSize: FontSize;
+  spacingMode: SpacingMode;
+  borderRadius: BorderRadiusSize;
+  reducedMotion: boolean;
+  highContrast: boolean;
 }
 
 interface ThemeContextType {
@@ -17,6 +25,11 @@ interface ThemeContextType {
   setShadowIntensity: (intensity: number) => void;
   setBlurIntensity: (intensity: number) => void;
   setPrimaryHue: (hue: number) => void;
+  setFontSize: (size: FontSize) => void;
+  setSpacingMode: (mode: SpacingMode) => void;
+  setBorderRadius: (radius: BorderRadiusSize) => void;
+  setReducedMotion: (reduced: boolean) => void;
+  setHighContrast: (high: boolean) => void;
   resetToDefaults: () => void;
 }
 
@@ -26,11 +39,36 @@ const defaultSettings: ThemeSettings = {
   shadowIntensity: 1,
   blurIntensity: 1,
   primaryHue: 0,
+  fontSize: 'medium',
+  spacingMode: 'comfortable',
+  borderRadius: 'medium',
+  reducedMotion: false,
+  highContrast: false,
 };
 
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
 const THEME_STORAGE_KEY = 'theme-settings';
+
+const fontSizeValues: Record<FontSize, string> = {
+  small: '14px',
+  medium: '16px',
+  large: '18px',
+};
+
+const spacingValues: Record<SpacingMode, string> = {
+  compact: '0.75',
+  comfortable: '1',
+  spacious: '1.25',
+};
+
+const borderRadiusValues: Record<BorderRadiusSize, string> = {
+  none: '0px',
+  small: '4px',
+  medium: '8px',
+  large: '16px',
+  full: '9999px',
+};
 
 export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [theme, setTheme] = useState<ThemeSettings>(() => {
@@ -50,17 +88,28 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     const root = document.documentElement;
     
     // Remove all theme classes
-    root.classList.remove('theme-light', 'theme-glass', 'theme-neon');
+    root.classList.remove('theme-light', 'theme-glass', 'theme-neon', 'reduced-motion', 'high-contrast');
     
     // Add current theme class (dark is default, no class needed)
     if (theme.preset !== 'dark') {
       root.classList.add(`theme-${theme.preset}`);
     }
+
+    // Add accessibility classes
+    if (theme.reducedMotion) {
+      root.classList.add('reduced-motion');
+    }
+    if (theme.highContrast) {
+      root.classList.add('high-contrast');
+    }
     
     // Apply CSS variables
-    root.style.setProperty('--animation-speed', theme.animationSpeed.toString());
+    root.style.setProperty('--animation-speed', theme.reducedMotion ? '0' : theme.animationSpeed.toString());
     root.style.setProperty('--shadow-intensity', theme.shadowIntensity.toString());
     root.style.setProperty('--blur-intensity', theme.blurIntensity.toString());
+    root.style.setProperty('--base-font-size', fontSizeValues[theme.fontSize]);
+    root.style.setProperty('--spacing-scale', spacingValues[theme.spacingMode]);
+    root.style.setProperty('--base-radius', borderRadiusValues[theme.borderRadius]);
     
     // Apply primary hue (only in dark/light themes)
     if (theme.primaryHue !== 0 && (theme.preset === 'dark' || theme.preset === 'light')) {
@@ -92,6 +141,26 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     setTheme(prev => ({ ...prev, primaryHue }));
   }, []);
 
+  const setFontSize = useCallback((fontSize: FontSize) => {
+    setTheme(prev => ({ ...prev, fontSize }));
+  }, []);
+
+  const setSpacingMode = useCallback((spacingMode: SpacingMode) => {
+    setTheme(prev => ({ ...prev, spacingMode }));
+  }, []);
+
+  const setBorderRadius = useCallback((borderRadius: BorderRadiusSize) => {
+    setTheme(prev => ({ ...prev, borderRadius }));
+  }, []);
+
+  const setReducedMotion = useCallback((reducedMotion: boolean) => {
+    setTheme(prev => ({ ...prev, reducedMotion }));
+  }, []);
+
+  const setHighContrast = useCallback((highContrast: boolean) => {
+    setTheme(prev => ({ ...prev, highContrast }));
+  }, []);
+
   const resetToDefaults = useCallback(() => {
     setTheme(defaultSettings);
     localStorage.removeItem(THEME_STORAGE_KEY);
@@ -99,6 +168,9 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     const root = document.documentElement;
     root.style.removeProperty('--primary');
     root.style.removeProperty('--ring');
+    root.style.removeProperty('--base-font-size');
+    root.style.removeProperty('--spacing-scale');
+    root.style.removeProperty('--base-radius');
   }, []);
 
   return (
@@ -110,6 +182,11 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         setShadowIntensity,
         setBlurIntensity,
         setPrimaryHue,
+        setFontSize,
+        setSpacingMode,
+        setBorderRadius,
+        setReducedMotion,
+        setHighContrast,
         resetToDefaults,
       }}
     >

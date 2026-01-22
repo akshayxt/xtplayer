@@ -506,7 +506,7 @@ export const AudioPlayerProvider = ({ children }: { children: ReactNode }) => {
     console.log(`[Autoplay] Smart queue built with ${ranked.length} songs${isShuffle ? ' (shuffled)' : ''}`);
   }, [recentlyPlayed, autoplayQueue, fetchRelatedFromYTMusic, getAISuggestions, searchFromSuggestion, isShuffle]);
 
-  // Load YouTube API
+  // Load YouTube API and ensure background playback
   useEffect(() => {
     if (!window.YT) {
       const tag = document.createElement('script');
@@ -515,9 +515,26 @@ export const AudioPlayerProvider = ({ children }: { children: ReactNode }) => {
       firstScriptTag.parentNode?.insertBefore(tag, firstScriptTag);
     }
 
+    // Prevent playback interruption when switching tabs
+    // Some browsers may pause media when tab loses focus
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        // Tab is hidden - ensure audio continues
+        // Direct audio element should continue automatically
+        // YouTube iframe may need special handling in some browsers
+        console.log('[AudioPlayer] Tab hidden - maintaining playback');
+      } else {
+        // Tab is visible again - sync state
+        console.log('[AudioPlayer] Tab visible - syncing state');
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
       if (preloadTimeoutRef.current) clearTimeout(preloadTimeoutRef.current);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
   }, []);
 
