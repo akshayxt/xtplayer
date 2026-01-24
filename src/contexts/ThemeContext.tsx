@@ -1,9 +1,14 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 
-export type ThemePreset = 'dark' | 'light' | 'glass' | 'neon';
-export type FontSize = 'small' | 'medium' | 'large';
+export type ThemePreset = 'dark' | 'light' | 'glass' | 'neon' | 'midnight' | 'sunset' | 'forest' | 'ocean';
+export type FontSize = 'xs' | 'small' | 'medium' | 'large' | 'xl';
 export type SpacingMode = 'compact' | 'comfortable' | 'spacious';
 export type BorderRadiusSize = 'none' | 'small' | 'medium' | 'large' | 'full';
+export type FontFamily = 'system' | 'inter' | 'roboto' | 'poppins' | 'mono';
+export type IconSize = 'small' | 'medium' | 'large';
+export type LayoutDensity = 'dense' | 'normal' | 'relaxed';
+export type ButtonStyle = 'solid' | 'outline' | 'ghost' | 'gradient';
+export type CardStyle = 'flat' | 'elevated' | 'bordered' | 'glass';
 
 interface ThemeSettings {
   preset: ThemePreset;
@@ -16,6 +21,21 @@ interface ThemeSettings {
   borderRadius: BorderRadiusSize;
   reducedMotion: boolean;
   highContrast: boolean;
+  // New settings
+  fontFamily: FontFamily;
+  iconSize: IconSize;
+  layoutDensity: LayoutDensity;
+  buttonStyle: ButtonStyle;
+  cardStyle: CardStyle;
+  saturation: number;
+  brightness: number;
+  showKeyboardShortcuts: boolean;
+  compactPlayer: boolean;
+  showAlbumArt: boolean;
+  glowEffects: boolean;
+  textShadow: boolean;
+  borderWidth: number;
+  backgroundOpacity: number;
 }
 
 interface ThemeContextType {
@@ -30,6 +50,21 @@ interface ThemeContextType {
   setBorderRadius: (radius: BorderRadiusSize) => void;
   setReducedMotion: (reduced: boolean) => void;
   setHighContrast: (high: boolean) => void;
+  // New setters
+  setFontFamily: (family: FontFamily) => void;
+  setIconSize: (size: IconSize) => void;
+  setLayoutDensity: (density: LayoutDensity) => void;
+  setButtonStyle: (style: ButtonStyle) => void;
+  setCardStyle: (style: CardStyle) => void;
+  setSaturation: (saturation: number) => void;
+  setBrightness: (brightness: number) => void;
+  setShowKeyboardShortcuts: (show: boolean) => void;
+  setCompactPlayer: (compact: boolean) => void;
+  setShowAlbumArt: (show: boolean) => void;
+  setGlowEffects: (glow: boolean) => void;
+  setTextShadow: (shadow: boolean) => void;
+  setBorderWidth: (width: number) => void;
+  setBackgroundOpacity: (opacity: number) => void;
   resetToDefaults: () => void;
 }
 
@@ -44,6 +79,20 @@ const defaultSettings: ThemeSettings = {
   borderRadius: 'medium',
   reducedMotion: false,
   highContrast: false,
+  fontFamily: 'system',
+  iconSize: 'medium',
+  layoutDensity: 'normal',
+  buttonStyle: 'solid',
+  cardStyle: 'elevated',
+  saturation: 100,
+  brightness: 100,
+  showKeyboardShortcuts: true,
+  compactPlayer: false,
+  showAlbumArt: true,
+  glowEffects: true,
+  textShadow: false,
+  borderWidth: 1,
+  backgroundOpacity: 100,
 };
 
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
@@ -51,9 +100,11 @@ const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 const THEME_STORAGE_KEY = 'theme-settings';
 
 const fontSizeValues: Record<FontSize, string> = {
+  xs: '12px',
   small: '14px',
   medium: '16px',
   large: '18px',
+  xl: '20px',
 };
 
 const spacingValues: Record<SpacingMode, string> = {
@@ -68,6 +119,26 @@ const borderRadiusValues: Record<BorderRadiusSize, string> = {
   medium: '8px',
   large: '16px',
   full: '9999px',
+};
+
+const fontFamilyValues: Record<FontFamily, string> = {
+  system: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+  inter: '"Inter", sans-serif',
+  roboto: '"Roboto", sans-serif',
+  poppins: '"Poppins", sans-serif',
+  mono: '"JetBrains Mono", "Fira Code", monospace',
+};
+
+const iconSizeValues: Record<IconSize, string> = {
+  small: '0.875',
+  medium: '1',
+  large: '1.25',
+};
+
+const layoutDensityValues: Record<LayoutDensity, { padding: string; gap: string }> = {
+  dense: { padding: '0.5rem', gap: '0.25rem' },
+  normal: { padding: '1rem', gap: '0.5rem' },
+  relaxed: { padding: '1.5rem', gap: '1rem' },
 };
 
 export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -88,7 +159,12 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     const root = document.documentElement;
     
     // Remove all theme classes
-    root.classList.remove('theme-light', 'theme-glass', 'theme-neon', 'reduced-motion', 'high-contrast');
+    root.classList.remove(
+      'theme-light', 'theme-glass', 'theme-neon', 
+      'theme-midnight', 'theme-sunset', 'theme-forest', 'theme-ocean',
+      'reduced-motion', 'high-contrast',
+      'glow-effects', 'text-shadow-enabled'
+    );
     
     // Add current theme class (dark is default, no class needed)
     if (theme.preset !== 'dark') {
@@ -102,6 +178,12 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     if (theme.highContrast) {
       root.classList.add('high-contrast');
     }
+    if (theme.glowEffects) {
+      root.classList.add('glow-effects');
+    }
+    if (theme.textShadow) {
+      root.classList.add('text-shadow-enabled');
+    }
     
     // Apply CSS variables
     root.style.setProperty('--animation-speed', theme.reducedMotion ? '0' : theme.animationSpeed.toString());
@@ -110,6 +192,14 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     root.style.setProperty('--base-font-size', fontSizeValues[theme.fontSize]);
     root.style.setProperty('--spacing-scale', spacingValues[theme.spacingMode]);
     root.style.setProperty('--base-radius', borderRadiusValues[theme.borderRadius]);
+    root.style.setProperty('--font-family', fontFamilyValues[theme.fontFamily]);
+    root.style.setProperty('--icon-scale', iconSizeValues[theme.iconSize]);
+    root.style.setProperty('--layout-padding', layoutDensityValues[theme.layoutDensity].padding);
+    root.style.setProperty('--layout-gap', layoutDensityValues[theme.layoutDensity].gap);
+    root.style.setProperty('--saturation', `${theme.saturation}%`);
+    root.style.setProperty('--brightness', `${theme.brightness}%`);
+    root.style.setProperty('--border-width', `${theme.borderWidth}px`);
+    root.style.setProperty('--bg-opacity', (theme.backgroundOpacity / 100).toString());
     
     // Apply primary hue (only in dark/light themes)
     if (theme.primaryHue !== 0 && (theme.preset === 'dark' || theme.preset === 'light')) {
@@ -161,6 +251,63 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     setTheme(prev => ({ ...prev, highContrast }));
   }, []);
 
+  // New setters
+  const setFontFamily = useCallback((fontFamily: FontFamily) => {
+    setTheme(prev => ({ ...prev, fontFamily }));
+  }, []);
+
+  const setIconSize = useCallback((iconSize: IconSize) => {
+    setTheme(prev => ({ ...prev, iconSize }));
+  }, []);
+
+  const setLayoutDensity = useCallback((layoutDensity: LayoutDensity) => {
+    setTheme(prev => ({ ...prev, layoutDensity }));
+  }, []);
+
+  const setButtonStyle = useCallback((buttonStyle: ButtonStyle) => {
+    setTheme(prev => ({ ...prev, buttonStyle }));
+  }, []);
+
+  const setCardStyle = useCallback((cardStyle: CardStyle) => {
+    setTheme(prev => ({ ...prev, cardStyle }));
+  }, []);
+
+  const setSaturation = useCallback((saturation: number) => {
+    setTheme(prev => ({ ...prev, saturation }));
+  }, []);
+
+  const setBrightness = useCallback((brightness: number) => {
+    setTheme(prev => ({ ...prev, brightness }));
+  }, []);
+
+  const setShowKeyboardShortcuts = useCallback((showKeyboardShortcuts: boolean) => {
+    setTheme(prev => ({ ...prev, showKeyboardShortcuts }));
+  }, []);
+
+  const setCompactPlayer = useCallback((compactPlayer: boolean) => {
+    setTheme(prev => ({ ...prev, compactPlayer }));
+  }, []);
+
+  const setShowAlbumArt = useCallback((showAlbumArt: boolean) => {
+    setTheme(prev => ({ ...prev, showAlbumArt }));
+  }, []);
+
+  const setGlowEffects = useCallback((glowEffects: boolean) => {
+    setTheme(prev => ({ ...prev, glowEffects }));
+  }, []);
+
+  const setTextShadow = useCallback((textShadow: boolean) => {
+    setTheme(prev => ({ ...prev, textShadow }));
+  }, []);
+
+  const setBorderWidth = useCallback((borderWidth: number) => {
+    setTheme(prev => ({ ...prev, borderWidth }));
+  }, []);
+
+  const setBackgroundOpacity = useCallback((backgroundOpacity: number) => {
+    setTheme(prev => ({ ...prev, backgroundOpacity }));
+  }, []);
+
   const resetToDefaults = useCallback(() => {
     setTheme(defaultSettings);
     localStorage.removeItem(THEME_STORAGE_KEY);
@@ -171,6 +318,14 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     root.style.removeProperty('--base-font-size');
     root.style.removeProperty('--spacing-scale');
     root.style.removeProperty('--base-radius');
+    root.style.removeProperty('--font-family');
+    root.style.removeProperty('--icon-scale');
+    root.style.removeProperty('--layout-padding');
+    root.style.removeProperty('--layout-gap');
+    root.style.removeProperty('--saturation');
+    root.style.removeProperty('--brightness');
+    root.style.removeProperty('--border-width');
+    root.style.removeProperty('--bg-opacity');
   }, []);
 
   return (
@@ -187,6 +342,20 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         setBorderRadius,
         setReducedMotion,
         setHighContrast,
+        setFontFamily,
+        setIconSize,
+        setLayoutDensity,
+        setButtonStyle,
+        setCardStyle,
+        setSaturation,
+        setBrightness,
+        setShowKeyboardShortcuts,
+        setCompactPlayer,
+        setShowAlbumArt,
+        setGlowEffects,
+        setTextShadow,
+        setBorderWidth,
+        setBackgroundOpacity,
         resetToDefaults,
       }}
     >
