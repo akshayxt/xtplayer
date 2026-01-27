@@ -4,11 +4,12 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Plus, Link, Loader2, Music, Search, Check } from 'lucide-react';
+import { Plus, Link, Loader2, Music, Search, Check, Globe } from 'lucide-react';
 import { useUserPlaylists } from '@/hooks/useUserPlaylists';
 import { useAuth } from '@/contexts/AuthContext';
 import { cn } from '@/lib/utils';
 import type { FreeTrack } from '@/hooks/useFreeMusicCatalog';
+import UniversalPlaylistImport from './UniversalPlaylistImport';
 
 interface CreatePlaylistModalProps {
   isOpen: boolean;
@@ -29,6 +30,7 @@ const CreatePlaylistModal = ({ isOpen, onClose, onPlaylistCreated }: CreatePlayl
   const [isLoading, setIsLoading] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
   const [activeTab, setActiveTab] = useState('create');
+  const [showUniversalImport, setShowUniversalImport] = useState(false);
 
   const handleCreate = async () => {
     if (!name.trim()) return;
@@ -243,22 +245,14 @@ const CreatePlaylistModal = ({ isOpen, onClose, onPlaylistCreated }: CreatePlayl
 
           <TabsContent value="import" className="space-y-4 mt-4">
             <div className="space-y-4">
+              {/* Quick import options */}
               <div className="bg-muted/50 rounded-xl p-4 space-y-3">
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-[#1DB954]/10 flex items-center justify-center">
-                    <Music className="w-5 h-5 text-[#1DB954]" />
+                  <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
+                    <Music className="w-5 h-5 text-primary" />
                   </div>
                   <div>
-                    <p className="font-medium text-foreground">Spotify</p>
-                    <p className="text-xs text-muted-foreground">Public playlists only</p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-[#FF0000]/10 flex items-center justify-center">
-                    <Music className="w-5 h-5 text-[#FF0000]" />
-                  </div>
-                  <div>
-                    <p className="font-medium text-foreground">YouTube</p>
+                    <p className="font-medium text-foreground">Spotify / YouTube</p>
                     <p className="text-xs text-muted-foreground">Public playlists only</p>
                   </div>
                 </div>
@@ -280,22 +274,53 @@ const CreatePlaylistModal = ({ isOpen, onClose, onPlaylistCreated }: CreatePlayl
                   Exact matches depend on availability.
                 </p>
               </div>
-            </div>
 
-            <Button 
-              onClick={handleImport} 
-              disabled={!importUrl.trim() || isLoading}
-              className="w-full"
-            >
-              {isLoading ? (
-                <Loader2 className="w-4 h-4 animate-spin mr-2" />
-              ) : (
-                <Link className="w-4 h-4 mr-2" />
-              )}
-              Import Playlist
-            </Button>
+              <Button 
+                onClick={handleImport} 
+                disabled={!importUrl.trim() || isLoading}
+                className="w-full"
+              >
+                {isLoading ? (
+                  <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                ) : (
+                  <Link className="w-4 h-4 mr-2" />
+                )}
+                Quick Import
+              </Button>
+
+              <div className="relative">
+                <div className="absolute inset-0 flex items-center">
+                  <span className="w-full border-t" />
+                </div>
+                <div className="relative flex justify-center text-xs uppercase">
+                  <span className="bg-background px-2 text-muted-foreground">or</span>
+                </div>
+              </div>
+
+              <Button 
+                variant="outline"
+                onClick={() => setShowUniversalImport(true)}
+                className="w-full"
+              >
+                <Globe className="w-4 h-4 mr-2" />
+                Advanced Multi-Platform Import
+              </Button>
+              <p className="text-xs text-center text-muted-foreground">
+                Supports Spotify, YouTube, Apple Music, SoundCloud, JioSaavn, Wynk, and local files
+              </p>
+            </div>
           </TabsContent>
         </Tabs>
+
+        {/* Universal Import Modal */}
+        <UniversalPlaylistImport
+          isOpen={showUniversalImport}
+          onClose={() => setShowUniversalImport(false)}
+          onImportComplete={(playlistId) => {
+            onPlaylistCreated?.(playlistId);
+            handleClose();
+          }}
+        />
       </DialogContent>
     </Dialog>
   );
