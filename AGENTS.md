@@ -1,0 +1,1 @@
+- Keep external music access behind a dedicated versioned Edge Function and a separate Python SDK so browser contracts remain backward compatible and external clients receive a stable interface.
