@@ -1,0 +1,2 @@
+# Runtime client uses only the Python standard library.
+# Optional test dependency: pytest>=8
