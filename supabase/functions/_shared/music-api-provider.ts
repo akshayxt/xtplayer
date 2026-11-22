@@ -43,7 +43,7 @@ async function requestTracks(params: Record<string, string>): Promise<JamendoTra
 }
 
 export async function searchTracks(query: string, limit: number, offset: number): Promise<ApiTrack[]> {
-  const results = await requestTracks({ search: query, limit: String(limit), offset: String(offset), order: 'relevance' });
+  const results = await requestTracks({ search: query, limit: String(limit), offset: String(offset), order: 'searchweight' });
   return results.map(normalizeJamendoTrack);
 }
 

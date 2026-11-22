@@ -1,0 +1,261 @@
+openapi: 3.1.0
+info:
+  title: XTPlayer Music API
+  version: 1.0.0
+  description: >-
+    Catalog metadata, provider-controlled playback URL resolution, and account-owned
+    playlists/history. The API does not proxy or download audio. Review docs/api.md
+    for Jamendo non-commercial, attribution, and per-track license limits.
+servers:
+  - url: https://<your-cloud-host>/functions/v1/music-api
+    description: Replace the host with the deployed XTPlayer Cloud function host.
+security: []
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: XTPlayer account access token
+  parameters:
+    TrackId:
+      name: trackId
+      in: path
+      required: true
+      schema: { type: string, pattern: '^(jamendo:|free_)?[0-9]{1,20}$' }
+    PlaylistId:
+      name: playlistId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    Limit:
+      name: limit
+      in: query
+      schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+    Offset:
+      name: offset
+      in: query
+      schema: { type: integer, minimum: 0, maximum: 100000, default: 0 }
+  schemas:
+    ApiTrack:
+      type: object
+      required: [id, provider, title, artist, downloadAllowed, providerAllowsDownload]
+      properties:
+        id: { type: string, example: 'jamendo:123456' }
+        provider: { type: string, const: jamendo }
+        title: { type: string }
+        artist: { type: string }
+        album: { type: [string, 'null'] }
+        durationSeconds: { type: [integer, 'null'] }
+        durationMs: { type: [integer, 'null'] }
+        thumbnailUrl: { type: [string, 'null'], format: uri }
+        genre: { type: [string, 'null'] }
+        sourceUrl: { type: [string, 'null'], format: uri }
+        licenseUrl: { type: [string, 'null'], format: uri }
+        creator: { type: string }
+        downloadAllowed: { type: boolean, const: false }
+        providerAllowsDownload: { type: boolean }
+    Error:
+      type: object
+      required: [error, requestId]
+      properties:
+        requestId: { type: string, format: uuid }
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code: { type: string }
+            message: { type: string }
+            details: {}
+    PlaylistInput:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 100 }
+        description: { type: [string, 'null'], maxLength: 500 }
+    AddTrackInput:
+      type: object
+      required: [trackId]
+      properties:
+        trackId: { type: string, pattern: '^(jamendo:|free_)?[0-9]{1,20}$' }
+        position: { type: integer, minimum: 0, maximum: 100000 }
+  responses:
+    ErrorResponse:
+      description: Standard API error response.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+paths:
+  /v1/health:
+    get:
+      operationId: health
+      summary: API health and supported catalog
+      responses:
+        '200':
+          description: API is responding.
+          content:
+            application/json:
+              schema: { type: object, properties: { status: { type: string }, apiVersion: { type: string }, catalog: { type: string }, timestamp: { type: string, format: date-time }, downloads: { type: string } } }
+  /v1/search:
+    get:
+      operationId: searchMusic
+      summary: Search catalog tracks
+      parameters:
+        - { name: q, in: query, required: true, schema: { type: string, minLength: 1, maxLength: 200 } }
+        - { $ref: '#/components/parameters/Limit' }
+        - { $ref: '#/components/parameters/Offset' }
+      responses:
+        '200':
+          description: Search results.
+          content:
+            application/json:
+              schema: { type: object, properties: { query: { type: string }, tracks: { type: array, items: { $ref: '#/components/schemas/ApiTrack' } }, pagination: { type: object } } }
+        '400': { $ref: '#/components/responses/ErrorResponse' }
+        '502': { $ref: '#/components/responses/ErrorResponse' }
+  /v1/suggestions:
+    get:
+      operationId: searchSuggestions
+      summary: Get title and artist suggestions from catalog search
+      parameters:
+        - { name: q, in: query, required: true, schema: { type: string, minLength: 1, maxLength: 200 } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 10, default: 5 } }
+      responses:
+        '200': { description: Suggestions, content: { application/json: { schema: { type: object, properties: { query: { type: string }, suggestions: { type: array, items: { type: string } } } } } }
+        '400': { $ref: '#/components/responses/ErrorResponse' }
+  /v1/trending:
+    get:
+      operationId: getTrending
+      summary: Get weekly-popularity catalog tracks
+      parameters:
+        - { $ref: '#/components/parameters/Limit' }
+        - { $ref: '#/components/parameters/Offset' }
+      responses:
+        '200': { description: Trending tracks and pagination, content: { application/json: { schema: { type: object, properties: { tracks: { type: array, items: { $ref: '#/components/schemas/ApiTrack' } }, pagination: { type: object } } } } }
+        '502': { $ref: '#/components/responses/ErrorResponse' }
+  /v1/tracks/{trackId}:
+    get:
+      operationId: getTrack
+      summary: Get track metadata and attribution
+      parameters: [{ $ref: '#/components/parameters/TrackId' }]
+      responses:
+        '200': { description: Track metadata, content: { application/json: { schema: { type: object, properties: { track: { $ref: '#/components/schemas/ApiTrack' } } } } }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+  /v1/tracks/{trackId}/recommendations:
+    get:
+      operationId: getRecommendations
+      summary: Get genre-related tracks or popular fallback
+      parameters:
+        - { $ref: '#/components/parameters/TrackId' }
+        - { $ref: '#/components/parameters/Limit' }
+      responses:
+        '200': { description: Recommendations, content: { application/json: { schema: { type: object, properties: { seedTrackId: { type: string }, tracks: { type: array, items: { $ref: '#/components/schemas/ApiTrack' } } } } } }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+  /v1/tracks/{trackId}/stream:
+    get:
+      operationId: resolveStream
+      summary: Resolve provider-controlled playback URL
+      description: Not a proxy; URLs and range support are provider-controlled. Show source and license attribution.
+      parameters: [{ $ref: '#/components/parameters/TrackId' }]
+      responses:
+        '200':
+          description: Provider URL and attribution.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  trackId: { type: string }
+                  url: { type: string, format: uri }
+                  mimeType: { type: string }
+                  sourceUrl: { type: string, format: uri }
+                  licenseUrl: { type: string, format: uri }
+                  expiresAt: { type: [string, 'null'], format: date-time }
+                  rangeRequests: { type: string, const: provider-dependent }
+                  downloadAllowed: { type: boolean, const: false }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+  /v1/tracks/{trackId}/download:
+    get:
+      operationId: downloadTrack
+      summary: Downloads are disabled
+      parameters: [{ $ref: '#/components/parameters/TrackId' }]
+      responses:
+        '403': { $ref: '#/components/responses/ErrorResponse' }
+  /v1/playlists:
+    get:
+      operationId: listPlaylists
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/Limit' }
+        - { $ref: '#/components/parameters/Offset' }
+      responses:
+        '200': { description: Caller-owned playlists, content: { application/json: { schema: { type: object, properties: { playlists: { type: array, items: { type: object } }, pagination: { type: object } } } } }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
+    post:
+      operationId: createPlaylist
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/PlaylistInput' } } }
+      responses:
+        '201': { description: Created playlist. }
+        '400': { $ref: '#/components/responses/ErrorResponse' }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
+  /v1/playlists/{playlistId}:
+    get:
+      operationId: getPlaylist
+      security: [{ bearerAuth: [] }]
+      parameters: [{ $ref: '#/components/parameters/PlaylistId' }]
+      responses:
+        '200': { description: Caller-owned playlist with ordered tracks. }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+    delete:
+      operationId: deletePlaylist
+      security: [{ bearerAuth: [] }]
+      parameters: [{ $ref: '#/components/parameters/PlaylistId' }]
+      responses:
+        '200': { description: Playlist deleted. }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+  /v1/playlists/{playlistId}/tracks:
+    post:
+      operationId: addPlaylistTrack
+      security: [{ bearerAuth: [] }]
+      parameters: [{ $ref: '#/components/parameters/PlaylistId' }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/AddTrackInput' } } }
+      responses:
+        '201': { description: Track added. }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+        '409': { $ref: '#/components/responses/ErrorResponse' }
+  /v1/playlists/{playlistId}/tracks/{trackRecordId}:
+    delete:
+      operationId: removePlaylistTrack
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/PlaylistId' }
+        - { name: trackRecordId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { description: Track record removed. }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+  /v1/history:
+    get:
+      operationId: getListeningHistory
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/Limit' }
+        - { $ref: '#/components/parameters/Offset' }
+      responses:
+        '200': { description: Caller-owned recent listening records. }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
+    post:
+      operationId: recordPlay
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [trackId], properties: { trackId: { type: string, pattern: '^(jamendo:|free_)?[0-9]{1,20}$' } } } } }
+      responses:
+        '201': { description: Play record added. }
+        '401': { $ref: '#/components/responses/ErrorResponse' }

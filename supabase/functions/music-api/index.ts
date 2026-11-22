@@ -1,6 +1,6 @@
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { corsHeaders } from 'npm:@supabase/supabase-js@2/cors';
-import { checkRateLimit, createRateLimitResponse, getClientIdentifier, getRateLimitHeaders } from '../_shared/rate-limit.ts';
+import { checkRateLimit, getClientIdentifier, getRateLimitHeaders } from '../_shared/rate-limit.ts';
 import { boundedInteger, formatTrackDuration, parseTrackId } from '../_shared/music-api-core.ts';
 import { getPlaybackUrl, getRecommendations, getSearchSuggestions, getTrackById, getTrendingTracks, searchTracks, ProviderError } from '../_shared/music-api-provider.ts';
 
@@ -17,8 +17,8 @@ function json(data: unknown, status = 200, headers: Record<string, string> = {})
   return new Response(JSON.stringify(data), { status, headers: { ...JSON_HEADERS, ...headers } });
 }
 
-function fail(status: number, code: string, message: string, requestId: string, details?: unknown): Response {
-  return json({ error: { code, message, ...(details === undefined ? {} : { details }) }, requestId }, status);
+function fail(status: number, code: string, message: string, requestId: string, details?: unknown, headers: Record<string, string> = {}): Response {
+  return json({ error: { code, message, ...(details === undefined ? {} : { details }) }, requestId }, status, headers);
 }
 
 function validText(value: unknown, name: string, maxLength: number, minLength = 1): string {
@@ -121,7 +121,13 @@ async function handle(req: Request, requestId: string): Promise<Response> {
   const protectedRoute = parts[0] === 'playlists' || parts[0] === 'history';
   const user = protectedRoute ? requireCaller(caller) : caller;
   const limitResult = checkRateLimit(user ? `user:${user.userId}` : getClientIdentifier(req), { maxRequests: user ? 60 : 30, windowMs: 60_000 });
-  if (!limitResult.allowed) return createRateLimitResponse(limitResult, corsHeaders);
+  if (!limitResult.allowed) {
+    const retryAfter = Math.max(1, Math.ceil((limitResult.resetTime - Date.now()) / 1000));
+    return fail(429, 'rate_limited', 'Too many requests. Please try again later.', requestId, { retryAfter }, {
+      ...getRateLimitHeaders(limitResult),
+      'Retry-After': String(retryAfter),
+    });
+  }
   const rateHeaders = getRateLimitHeaders(limitResult);
 
   if (parts.length === 1 && parts[0] === 'health' && req.method === 'GET') {

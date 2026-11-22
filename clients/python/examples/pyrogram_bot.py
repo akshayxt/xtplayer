@@ -1,0 +1,43 @@
+"""Example: search the XTPlayer catalog and link back to the licensed source."""
+
+import os
+
+from pyrogram import Client, filters
+from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+from xtplayer import ApiError, XTPlayerClient
+
+api = XTPlayerClient(
+    os.environ["XTPLAYER_API_BASE_URL"],
+    access_token=os.environ.get("XTPLAYER_ACCESS_TOKEN"),
+)
+bot = Client("xtplayer_music_bot")
+
+
+@bot.on_message(filters.command("play") & filters.private)
+async def search_and_link(client, message):
+    query = " ".join(message.command[1:]).strip()
+    if not query:
+        await message.reply_text("Usage: /play song or artist")
+        return
+
+    try:
+        result = await api.search_music(query, limit=5)
+    except ApiError as error:
+        text = "Sign-in expired; refresh the XTPLAYER_ACCESS_TOKEN." if error.status_code == 401 else error.message
+        await message.reply_text(text)
+        return
+
+    tracks = result.get("tracks", [])
+    if not tracks:
+        await message.reply_text("No catalog tracks found.")
+        return
+
+    for track in tracks:
+        title = f"{track['title']} — {track['artist']}"
+        attribution = f"Creator: {track['creator']}\nLicense: {track['licenseUrl'] or 'not supplied'}"
+        source = track.get("sourceUrl")
+        keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("Open source track", url=source)]]) if source else None
+        await message.reply_text(f"{title}\n{attribution}", reply_markup=keyboard, disable_web_page_preview=True)
+
+
+bot.run()

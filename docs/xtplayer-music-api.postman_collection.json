@@ -1,0 +1,32 @@
+{
+  "info": {
+    "name": "XTPlayer Music API v1",
+    "description": "Public catalog routes and account-token protected playlists/history. Audio downloads are disabled; review docs/api.md for legal/source limits.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "https://<your-cloud-host>/functions/v1/music-api" },
+    { "key": "accessToken", "value": "" },
+    { "key": "trackId", "value": "jamendo:123456" },
+    { "key": "playlistId", "value": "replace-with-playlist-uuid" },
+    { "key": "trackRecordId", "value": "replace-with-playlist-track-uuid" }
+  ],
+  "item": [
+    { "name": "Health", "request": { "method": "GET", "url": "{{baseUrl}}/v1/health" } },
+    { "name": "Search", "request": { "method": "GET", "url": "{{baseUrl}}/v1/search?q=night%20drive&limit=10" } },
+    { "name": "Suggestions", "request": { "method": "GET", "url": "{{baseUrl}}/v1/suggestions?q=ambient&limit=5" } },
+    { "name": "Trending", "request": { "method": "GET", "url": "{{baseUrl}}/v1/trending?limit=10&offset=0" } },
+    { "name": "Track", "request": { "method": "GET", "url": "{{baseUrl}}/v1/tracks/{{trackId}}" } },
+    { "name": "Recommendations", "request": { "method": "GET", "url": "{{baseUrl}}/v1/tracks/{{trackId}}/recommendations?limit=10" } },
+    { "name": "Resolve stream", "request": { "method": "GET", "url": "{{baseUrl}}/v1/tracks/{{trackId}}/stream" } },
+    { "name": "Download (expected 403)", "request": { "method": "GET", "url": "{{baseUrl}}/v1/tracks/{{trackId}}/download" } },
+    { "name": "List playlists", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }], "url": "{{baseUrl}}/v1/playlists?limit=50&offset=0" } },
+    { "name": "Create playlist", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"name\": \"Bot favorites\",\n  \"description\": \"Created through XTPlayer API\"\n}" }, "url": "{{baseUrl}}/v1/playlists" } },
+    { "name": "Get playlist", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }], "url": "{{baseUrl}}/v1/playlists/{{playlistId}}" } },
+    { "name": "Add track", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"trackId\": \"{{trackId}}\"\n}" }, "url": "{{baseUrl}}/v1/playlists/{{playlistId}}/tracks" } },
+    { "name": "Remove track", "request": { "method": "DELETE", "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }], "url": "{{baseUrl}}/v1/playlists/{{playlistId}}/tracks/{{trackRecordId}}" } },
+    { "name": "Delete playlist", "request": { "method": "DELETE", "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }], "url": "{{baseUrl}}/v1/playlists/{{playlistId}}" } },
+    { "name": "Recently played", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }], "url": "{{baseUrl}}/v1/history?limit=50&offset=0" } },
+    { "name": "Record play", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"trackId\": \"{{trackId}}\"\n}" }, "url": "{{baseUrl}}/v1/history" } }
+  ]
+}
