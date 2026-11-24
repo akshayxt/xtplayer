@@ -6,6 +6,8 @@ Async Python client for the XTPlayer Music API. Runtime requires Python 3.10+ an
 pip install -e clients/python
 ```
 
+To run the included Telegram example, install its optional dependency with `pip install -e 'clients/python[bot]'`.
+
 Configure these values in the process environment (do not commit account tokens):
 
 ```text

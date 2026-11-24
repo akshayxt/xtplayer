@@ -7,7 +7,7 @@ info:
     playlists/history. The API does not proxy or download audio. Review docs/api.md
     for Jamendo non-commercial, attribution, and per-track license limits.
 servers:
-  - url: https://<your-cloud-host>/functions/v1/music-api
+  - url: https://your-cloud-host.example/functions/v1/music-api
     description: Replace the host with the deployed XTPlayer Cloud function host.
 security: []
 components:
@@ -94,7 +94,7 @@ paths:
           description: API is responding.
           content:
             application/json:
-              schema: { type: object, properties: { status: { type: string }, apiVersion: { type: string }, catalog: { type: string }, timestamp: { type: string, format: date-time }, downloads: { type: string } } }
+              schema: { type: object, properties: { status: { type: string }, apiVersion: { type: string }, catalog: { type: string }, catalogStatus: { type: string, enum: [configured, not_configured] }, timestamp: { type: string, format: date-time }, downloads: { type: string } } }
   /v1/search:
     get:
       operationId: searchMusic
@@ -111,6 +111,7 @@ paths:
               schema: { type: object, properties: { query: { type: string }, tracks: { type: array, items: { $ref: '#/components/schemas/ApiTrack' } }, pagination: { type: object } } }
         '400': { $ref: '#/components/responses/ErrorResponse' }
         '502': { $ref: '#/components/responses/ErrorResponse' }
+        '503': { $ref: '#/components/responses/ErrorResponse' }
   /v1/suggestions:
     get:
       operationId: searchSuggestions
@@ -121,6 +122,7 @@ paths:
       responses:
         '200': { description: Suggestions, content: { application/json: { schema: { type: object, properties: { query: { type: string }, suggestions: { type: array, items: { type: string } } } } } }
         '400': { $ref: '#/components/responses/ErrorResponse' }
+        '503': { $ref: '#/components/responses/ErrorResponse' }
   /v1/trending:
     get:
       operationId: getTrending
@@ -131,6 +133,7 @@ paths:
       responses:
         '200': { description: Trending tracks and pagination, content: { application/json: { schema: { type: object, properties: { tracks: { type: array, items: { $ref: '#/components/schemas/ApiTrack' } }, pagination: { type: object } } } } }
         '502': { $ref: '#/components/responses/ErrorResponse' }
+        '503': { $ref: '#/components/responses/ErrorResponse' }
   /v1/tracks/{trackId}:
     get:
       operationId: getTrack
@@ -139,6 +142,7 @@ paths:
       responses:
         '200': { description: Track metadata, content: { application/json: { schema: { type: object, properties: { track: { $ref: '#/components/schemas/ApiTrack' } } } } }
         '404': { $ref: '#/components/responses/ErrorResponse' }
+        '503': { $ref: '#/components/responses/ErrorResponse' }
   /v1/tracks/{trackId}/recommendations:
     get:
       operationId: getRecommendations

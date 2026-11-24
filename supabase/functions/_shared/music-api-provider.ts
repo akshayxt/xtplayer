@@ -1,8 +1,8 @@
 import { normalizeJamendoTrack, parseTrackId, type ApiTrack, type JamendoTrack } from './music-api-core.ts';
 
 const JAMENDO_API = 'https://api.jamendo.com/v3.0/tracks/';
-// This is the same public application client ID used by XTPlayer's existing catalog function.
-const JAMENDO_CLIENT_ID = 'b6747d04';
+// Configure a registered Jamendo application ID in the Edge Function environment.
+const JAMENDO_CLIENT_ID = Deno.env.get('JAMENDO_CLIENT_ID');
 
 export class ProviderError extends Error {
   constructor(public status: number, public details: string) {
@@ -12,6 +12,9 @@ export class ProviderError extends Error {
 }
 
 async function requestTracks(params: Record<string, string>): Promise<JamendoTrack[]> {
+  if (!JAMENDO_CLIENT_ID) {
+    throw new ProviderError(503, 'A registered Jamendo application Client ID is not configured.');
+  }
   const url = new URL(JAMENDO_API);
   url.searchParams.set('client_id', JAMENDO_CLIENT_ID);
   url.searchParams.set('format', 'json');

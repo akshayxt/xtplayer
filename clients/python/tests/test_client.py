@@ -3,7 +3,7 @@ import io
 import json
 import unittest
 from unittest.mock import patch
-from urllib.error import HTTPError
+from urllib.error import HTTPError, URLError
 
 from xtplayer import ApiError, XTPlayerClient
 
@@ -49,6 +49,14 @@ class XTPlayerClientTests(unittest.TestCase):
                 asyncio.run(client.download_track("jamendo:42"))
         self.assertEqual(raised.exception.status_code, 403)
         self.assertEqual(raised.exception.code, "downloads_disabled")
+
+    def test_network_failures_become_retryable_network_errors(self):
+        client = XTPlayerClient("https://api.example/functions/v1/music-api", timeout=0.01)
+        with patch("xtplayer.client.urlopen", side_effect=URLError("timed out")):
+            with self.assertRaises(ApiError) as raised:
+                asyncio.run(client.search_music("ambient"))
+        self.assertEqual(raised.exception.status_code, 0)
+        self.assertEqual(raised.exception.code, "network_error")
 
     def test_stream_url_endpoint_is_available_to_async_client(self):
         client = XTPlayerClient("https://api.example/functions/v1/music-api")

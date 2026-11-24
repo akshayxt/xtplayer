@@ -1,5 +1,5 @@
-import { assertEquals, assertNull } from 'https://deno.land/std@0.224.0/assert/mod.ts';
-import { boundedInteger, formatTrackDuration, normalizeJamendoTrack, parseTrackId } from './music-api-core.ts';
+import { assertEquals } from 'https://deno.land/std@0.224.0/assert/mod.ts';
+import { boundedInteger, formatTrackDuration, normalizeJamendoTrack, parseTrackId } from '../_shared/music-api-core.ts';
 
 Deno.test('accepts normalized and legacy Jamendo track identifiers', () => {
   assertEquals(parseTrackId('jamendo:123456'), '123456');
@@ -8,20 +8,20 @@ Deno.test('accepts normalized and legacy Jamendo track identifiers', () => {
 });
 
 Deno.test('rejects malformed track identifiers', () => {
-  assertNull(parseTrackId('jamendo:1/2'));
-  assertNull(parseTrackId('https://provider.example/audio.mp3'));
-  assertNull(parseTrackId(''));
+  assertEquals(parseTrackId('jamendo:1/2'), null);
+  assertEquals(parseTrackId('https://provider.example/audio.mp3'), null);
+  assertEquals(parseTrackId(''), null);
 });
 
 Deno.test('bounds pagination values and rejects invalid limits', () => {
   assertEquals(boundedInteger('25', 20, 1, 100), 25);
   assertEquals(boundedInteger(null, 20, 1, 100), 20);
-  assertNull(boundedInteger('101', 20, 1, 100));
-  assertNull(boundedInteger('-1', 20, 1, 100));
-  assertNull(boundedInteger('1e2', 20, 1, 100));
+  assertEquals(boundedInteger('101', 20, 1, 100), null);
+  assertEquals(boundedInteger('-1', 20, 1, 100), null);
+  assertEquals(boundedInteger('1e2', 20, 1, 100), null);
 });
 
-Deno.test('normalizes metadata, keeps attribution, and disables API downloads', () => {
+Deno.test('normalizes metadata with attribution while the API forbids downloads', () => {
   const track = normalizeJamendoTrack({
     id: 42,
     name: ' A Song ',
@@ -35,7 +35,6 @@ Deno.test('normalizes metadata, keeps attribution, and disables API downloads', 
     album_image: 'https://images.example/art.jpg',
     musicinfo: { tags: { genres: ['ambient'] } },
   });
-
   assertEquals(track.id, 'jamendo:42');
   assertEquals(track.durationMs, 185000);
   assertEquals(track.thumbnailUrl, 'https://images.example/art.jpg');
@@ -46,7 +45,7 @@ Deno.test('normalizes metadata, keeps attribution, and disables API downloads', 
   assertEquals(track.providerAllowsDownload, true);
 });
 
-Deno.test('formats player durations', () => {
+Deno.test('formats durations for playlist metadata', () => {
   assertEquals(formatTrackDuration(185), '3:05');
   assertEquals(formatTrackDuration(null), null);
 });

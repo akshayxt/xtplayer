@@ -137,6 +137,7 @@ Playlist names are 1–100 characters; descriptions are at most 500. Duplicate t
 | 429 | `rate_limited` | Rate limit reached; respect `Retry-After` |
 | 502 | `provider_error` | Catalog provider failed or returned an invalid result |
 | 503 | `auth_unavailable` | Account-token verification is temporarily unavailable |
+| 503 | `catalog_unavailable` | No registered provider application ID is configured, or the catalog is unreachable |
 
 ## Python / Pyrogram quick start
 
@@ -171,5 +172,5 @@ Import [`docs/xtplayer-music-api.postman_collection.json`](./xtplayer-music-api.
 
 - Search/trending/recommendations call the upstream catalog; the API does not cache audio or metadata beyond in-memory request processing.
 - Current rate limiting is per Edge Function instance. Add a shared quota store before treating it as a hard distributed limit.
-- The current catalog app ID is reused from the existing site integration. Register/confirm the deployed application with the provider and update its configured identifier before production use.
+- Set a registered Jamendo application Client ID as the Edge Function environment value `JAMENDO_CLIENT_ID`. Without it, catalog routes return `503 catalog_unavailable` rather than a misleading empty result. Register/confirm the deployed application with the provider before production use.
 - The API supports only the Jamendo catalog. Existing scraped YouTube/Spotify playlist flows are not exposed or reused here.

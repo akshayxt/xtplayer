@@ -4,6 +4,7 @@ import { checkRateLimit, getClientIdentifier, getRateLimitHeaders } from '../_sh
 import { boundedInteger, formatTrackDuration, parseTrackId } from '../_shared/music-api-core.ts';
 import { getPlaybackUrl, getRecommendations, getSearchSuggestions, getTrackById, getTrendingTracks, searchTracks, ProviderError } from '../_shared/music-api-provider.ts';
 
+type DatabaseClient = ReturnType<typeof createClient<any>>;
 const JSON_HEADERS = { ...corsHeaders, 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' };
 const MAX_BODY_BYTES = 16_384;
 
@@ -65,6 +66,21 @@ function apiTrackId(value: string): string {
   return value;
 }
 
+function validUuid(value: string, name: string): string {
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)) {
+    throw new ApiError(400, 'invalid_request', `${name} must be a valid UUID.`);
+  }
+  return value;
+}
+
+function decodePathPart(value: string): string {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    throw new ApiError(400, 'invalid_request', 'Path contains invalid URL encoding.');
+  }
+}
+
 function requireDatabaseConfig(): { url: string; key: string } {
   const url = Deno.env.get('SUPABASE_URL');
   const key = Deno.env.get('SUPABASE_ANON_KEY') ?? Deno.env.get('SUPABASE_PUBLISHABLE_KEY');
@@ -72,14 +88,14 @@ function requireDatabaseConfig(): { url: string; key: string } {
   return { url, key };
 }
 
-async function resolveCaller(req: Request): Promise<{ userId: string; db: ReturnType<typeof createClient> } | null> {
+async function resolveCaller(req: Request): Promise<{ userId: string; db: DatabaseClient } | null> {
   const authHeader = req.headers.get('authorization');
   if (!authHeader) return null;
   const match = authHeader.match(/^Bearer\s+([^\s]+)$/i);
   if (!match) throw new ApiError(401, 'unauthorized', 'Use a valid XTPlayer account access token.');
 
   const { url, key } = requireDatabaseConfig();
-  const db = createClient(url, key, {
+  const db = createClient<any>(url, key, {
     auth: { autoRefreshToken: false, persistSession: false },
     global: { headers: { Authorization: authHeader } },
   });
@@ -101,7 +117,7 @@ function parsePosition(value: unknown): number | null {
   return value;
 }
 
-async function getOwnedPlaylist(db: ReturnType<typeof createClient>, userId: string, playlistId: string) {
+async function getOwnedPlaylist(db: DatabaseClient, userId: string, playlistId: string) {
   const { data, error } = await db.from('playlists').select('id, user_id, name, description, cover_url, is_public, created_at, updated_at')
     .eq('id', playlistId).eq('user_id', userId).maybeSingle();
   if (error) throw new ApiError(500, 'database_error', 'Could not load the playlist.');
@@ -115,7 +131,7 @@ async function handle(req: Request, requestId: string): Promise<Response> {
   const functionIndex = segments.indexOf('music-api');
   const route = segments.slice(functionIndex >= 0 ? functionIndex + 1 : 0);
   if (route[0] !== 'v1') throw new ApiError(404, 'not_found', 'API version was not found.');
-  const parts = route.slice(1).map((part) => decodeURIComponent(part));
+  const parts = route.slice(1).map(decodePathPart);
 
   const caller = await resolveCaller(req);
   const protectedRoute = parts[0] === 'playlists' || parts[0] === 'history';
@@ -131,7 +147,14 @@ async function handle(req: Request, requestId: string): Promise<Response> {
   const rateHeaders = getRateLimitHeaders(limitResult);
 
   if (parts.length === 1 && parts[0] === 'health' && req.method === 'GET') {
-    return json({ status: 'ok', apiVersion: 'v1', catalog: 'Jamendo API', timestamp: new Date().toISOString(), downloads: 'disabled' }, 200, rateHeaders);
+    return json({
+      status: 'ok',
+      apiVersion: 'v1',
+      catalog: 'Jamendo API',
+      catalogStatus: Deno.env.get('JAMENDO_CLIENT_ID') ? 'configured' : 'not_configured',
+      timestamp: new Date().toISOString(),
+      downloads: 'disabled',
+    }, 200, rateHeaders);
   }
 
   if (parts.length === 1 && parts[0] === 'search' && req.method === 'GET') {
@@ -144,7 +167,9 @@ async function handle(req: Request, requestId: string): Promise<Response> {
 
   if (parts.length === 1 && parts[0] === 'suggestions' && req.method === 'GET') {
     const query = validText(url.searchParams.get('q'), 'q', 200);
-    const suggestions = await getSearchSuggestions(query, Math.min(parseLimit(url, 5), 10));
+    const limit = boundedInteger(url.searchParams.get('limit'), 5, 1, 10);
+    if (limit === null) throw new ApiError(400, 'invalid_request', 'limit must be an integer from 1 to 10.');
+    const suggestions = await getSearchSuggestions(query, limit);
     return json({ query, suggestions }, 200, rateHeaders);
   }
 
@@ -183,6 +208,7 @@ async function handle(req: Request, requestId: string): Promise<Response> {
   }
 
   if (parts[0] === 'tracks' && parts.length === 3 && parts[2] === 'download' && req.method === 'GET') {
+    apiTrackId(parts[1]);
     throw new ApiError(403, 'downloads_disabled', 'Audio downloads and redistribution are not enabled by this API.');
   }
 
@@ -217,7 +243,7 @@ async function handle(req: Request, requestId: string): Promise<Response> {
 
   if (parts[0] === 'playlists' && parts.length === 2 && req.method === 'GET') {
     const { db, userId } = requireCaller(user);
-    const playlist = await getOwnedPlaylist(db, userId, parts[1]);
+    const playlist = await getOwnedPlaylist(db, userId, validUuid(parts[1], 'playlistId'));
     const { data: tracks, error } = await db.from('playlist_songs').select('id, video_id, title, thumbnail, channel_title, duration, position, added_at')
       .eq('playlist_id', playlist.id).order('position', { ascending: true });
     if (error) throw new ApiError(500, 'database_error', 'Could not load playlist tracks.');
@@ -226,19 +252,23 @@ async function handle(req: Request, requestId: string): Promise<Response> {
 
   if (parts[0] === 'playlists' && parts.length === 2 && req.method === 'DELETE') {
     const { db, userId } = requireCaller(user);
-    await getOwnedPlaylist(db, userId, parts[1]);
-    const { error } = await db.from('playlists').delete().eq('id', parts[1]).eq('user_id', userId);
+    const playlistId = validUuid(parts[1], 'playlistId');
+    await getOwnedPlaylist(db, userId, playlistId);
+    const { error } = await db.from('playlists').delete().eq('id', playlistId).eq('user_id', userId);
     if (error) throw new ApiError(500, 'database_error', 'Could not delete playlist.');
     return json({ deleted: true, playlistId: parts[1] }, 200, rateHeaders);
   }
 
   if (parts[0] === 'playlists' && parts.length === 3 && parts[2] === 'tracks' && req.method === 'POST') {
     const { db, userId } = requireCaller(user);
-    const playlist = await getOwnedPlaylist(db, userId, parts[1]);
+    const playlist = await getOwnedPlaylist(db, userId, validUuid(parts[1], 'playlistId'));
     const body = await readBody(req);
     const trackId = apiTrackId(validText(body.trackId, 'trackId', 80));
     const track = await getTrackById(trackId);
     if (!track) throw new ApiError(404, 'not_found', 'Track was not found in the available catalog.');
+    if (body.position !== undefined && body.position !== null && parsePosition(body.position) === null) {
+      throw new ApiError(400, 'invalid_request', 'position must be an integer from 0 to 100000.');
+    }
     const position = parsePosition(body.position);
     const { data: last, error: lastError } = await db.from('playlist_songs').select('position').eq('playlist_id', playlist.id).order('position', { ascending: false }).limit(1).maybeSingle();
     if (lastError) throw new ApiError(500, 'database_error', 'Could not determine playlist order.');
@@ -261,8 +291,9 @@ async function handle(req: Request, requestId: string): Promise<Response> {
 
   if (parts[0] === 'playlists' && parts.length === 4 && parts[2] === 'tracks' && req.method === 'DELETE') {
     const { db, userId } = requireCaller(user);
-    const playlist = await getOwnedPlaylist(db, userId, parts[1]);
-    const { data, error: readError } = await db.from('playlist_songs').select('id').eq('id', parts[3]).eq('playlist_id', playlist.id).maybeSingle();
+    const playlist = await getOwnedPlaylist(db, userId, validUuid(parts[1], 'playlistId'));
+    const trackRecordId = validUuid(parts[3], 'trackRecordId');
+    const { data, error: readError } = await db.from('playlist_songs').select('id').eq('id', trackRecordId).eq('playlist_id', playlist.id).maybeSingle();
     if (readError) throw new ApiError(500, 'database_error', 'Could not load playlist track.');
     if (!data) throw new ApiError(404, 'not_found', 'Playlist track was not found.');
     const { error } = await db.from('playlist_songs').delete().eq('id', data.id).eq('playlist_id', playlist.id);
@@ -310,6 +341,9 @@ Deno.serve(async (req: Request) => {
     return await handle(req, requestId);
   } catch (error) {
     if (error instanceof ApiError) return fail(error.status, error.code, error.message, requestId, error.details);
+    if (error instanceof ProviderError && error.status === 503) {
+      return fail(503, 'catalog_unavailable', 'The music catalog is not configured or is temporarily unreachable.', requestId);
+    }
     if (error instanceof ProviderError) return fail(502, 'provider_error', 'The music catalog provider is temporarily unavailable.', requestId, { providerStatus: error.status, details: error.details });
     console.error(`Music API request ${requestId} failed:`, error instanceof Error ? error.message : 'Unknown error');
     return fail(500, 'internal_error', 'The request could not be completed.', requestId);
