@@ -15,13 +15,13 @@ This API exposes XTPlayer's Jamendo-backed catalog and each signed-in user's own
 
 Set `XTPLAYER_API_BASE_URL` to the deployed Edge Function base ending in `/functions/v1/music-api`. A generic example is `https://<your-cloud-host>/functions/v1/music-api`.
 
-Catalog reads are public and rate-limited. Playlist and listening-history endpoints require a valid **XTPlayer account access token**:
+Catalog reads are public and rate-limited. Playlist and listening-history endpoints require that user's valid **XTPlayer account access token**:
 
 ```http
 Authorization: Bearer <XTPLAYER_ACCESS_TOKEN>
 ```
 
-Obtain the token from the signed-in XTPlayer session. Do not commit it, put it in a browser URL, or log it. Account tokens expire; on `401 unauthorized`, sign in again through XTPlayer and replace the token. This API does not issue developer API keys or refresh tokens.
+Obtain the token from that user's signed-in XTPlayer session. Do not commit it, put it in a browser URL, or log it. Account tokens expire; on `401 unauthorized`, sign in again through XTPlayer and replace the token. This API does not issue developer API keys or refresh tokens. Do not configure one owner's token in a bot shared by many Telegram users: private endpoints would operate on that owner's account. A per-Telegram-user XTPlayer sign-in flow is not included.
 
 ## Common response formats
 
@@ -162,7 +162,7 @@ async def find_songs(query: str):
         raise
 ```
 
-See [`clients/python/examples/pyrogram_bot.py`](../clients/python/examples/pyrogram_bot.py) for a search command that links users to the licensed source page rather than copying provider audio into Telegram.
+See [`clients/python/examples/pyrogram_bot.py`](../clients/python/examples/pyrogram_bot.py) for a public catalog search command that links users to the licensed source page rather than copying provider audio into Telegram. The example does not use private playlist/history endpoints.
 
 ## Postman
 

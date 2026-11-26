@@ -1,15 +1,10 @@
 """Example: search the XTPlayer catalog and link back to the licensed source."""
 
-import os
-
 from pyrogram import Client, filters
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from xtplayer import ApiError, XTPlayerClient
 
-api = XTPlayerClient(
-    os.environ["XTPLAYER_API_BASE_URL"],
-    access_token=os.environ.get("XTPLAYER_ACCESS_TOKEN"),
-)
+api = XTPlayerClient("https://<your-cloud-host>/functions/v1/music-api")
 bot = Client("xtplayer_music_bot")
 
 
@@ -23,8 +18,7 @@ async def search_and_link(client, message):
     try:
         result = await api.search_music(query, limit=5)
     except ApiError as error:
-        text = "Sign-in expired; refresh the XTPLAYER_ACCESS_TOKEN." if error.status_code == 401 else error.message
-        await message.reply_text(text)
+        await message.reply_text(error.message)
         return
 
     tracks = result.get("tracks", [])
